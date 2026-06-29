@@ -1,20 +1,12 @@
-import { NextRequest } from 'next/server';
-import { db } from '@/lib/db';
+import { listMedia } from '@/lib/media-store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const items = await db.media.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 5000,
-    select: { id: true, title: true, updatedAt: true },
-  });
+  const { items } = await listMedia({ page: 1, pageSize: 5000 });
   const base = 'https://twitchan.com';
-  const urls = items
-    .map((m) => `${base}/?m=${m.id}`)
-    .join('\n');
-  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${base}/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>\n<url><loc>${base}/?p=about</loc><changefreq>monthly</changefreq></url>\n<url><loc>${base}/?p=policy</loc><changefreq>monthly</changefreq></url>\n${items.map((m) => `<url><loc>${base}/?m=${m.id}</loc><lastmod>${m.updatedAt.toISOString()}</lastmod></url>`).join('\n')}\n</urlset>`;
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${base}/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>\n<url><loc>${base}/?p=about</loc><changefreq>monthly</changefreq></url>\n<url><loc>${base}/?p=policy</loc><changefreq>monthly</changefreq></url>\n${items.map((m) => `<url><loc>${base}/?m=${m.id}</loc>${m.addedAt ? `<lastmod>${new Date(m.addedAt).toISOString()}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>`;
   return new Response(body, {
     headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=600' },
   });

@@ -10,10 +10,11 @@ export async function POST(req: NextRequest) {
   if (!verifyPassword(password)) {
     return NextResponse.json({ error: 'invalid' }, { status: 401 });
   }
-  const token = await createSession();
+  const token = createSession();
   const res = NextResponse.json({ ok: true, token });
   res.cookies.set('admin_token', token, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 60 * 60 * 12,
     path: '/',
@@ -23,13 +24,13 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const token = getTokenFromReq(req as unknown as Request);
-  const ok = await verifySession(token);
+  const ok = verifySession(token);
   return NextResponse.json({ ok });
 }
 
 export async function DELETE(req: NextRequest) {
   const token = getTokenFromReq(req as unknown as Request);
-  if (token) await destroySession(token);
+  if (token) destroySession(token);
   const res = NextResponse.json({ ok: true });
   res.cookies.delete('admin_token');
   return res;

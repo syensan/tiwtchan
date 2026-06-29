@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getMediaById } from '@/lib/media-store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Proxy to actual file URL (avoids CORS, hides referer, allows Content-Disposition attachment)
+// Proxy to actual file URL (avoids CORS, hides referer, forces Content-Disposition attachment)
 export async function GET(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'no id' }, { status: 400 });
-  const m = await db.media.findUnique({ where: { id } });
+  const m = await getMediaById(id);
   if (!m) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
   const target = m.videoUrl || m.sourceUrl;

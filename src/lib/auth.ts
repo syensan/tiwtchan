@@ -1,67 +1,83 @@
-// Admin auth - secure password gate.
+// Admin auth — pure HMAC-signed tokens, no DB needed.
+// Works on Netlify serverless.
+//
 // Password is composed of 4 segments loaded from env vars.
-// Each segment can be rotated independently. Hash stored in env.
-//
-// Default password (demo): Please replace via env on Netlify:
-//   ADMIN_PW_S1, ADMIN_PW_S2, ADMIN_PW_S3, ADMIN_PW_S4
-//
 // The full password is: S1-S2-S3-S4
-// Stored as sha256 in env ADMIN_PW_HASH
+//
+// Set on Netlify:
+//   ADMIN_PW_S1, ADMIN_PW_S2, ADMIN_PW_S3, ADMIN_PW_S4
+//   ADMIN_SIGN_KEY (random 32+ char string used to sign tokens)
 
 import crypto from 'crypto';
-import { db } from './db';
 
 function env(key: string, fallback = ''): string {
   return (process.env[key] || fallback).trim();
 }
 
-// Compose raw password from 4 env segments (more entropy than a single var)
 export function getExpectedPassword(): string {
   const s1 = env('ADMIN_PW_S1');
   const s2 = env('ADMIN_PW_S2');
   const s3 = env('ADMIN_PW_S3');
   const s4 = env('ADMIN_PW_S4');
   if (s1 || s2 || s3 || s4) return [s1, s2, s3, s4].filter(Boolean).join('-');
-  // Default fallback (only for local dev)
-  return 'tw-7xQ9!kz#Lm2-vR4$pW8@nE6-cB3^yU0&hA5';
+  // Default fallback (local dev only — override on Netlify)
+  return 'tw-7xQ9!kz-Lm2-vR4$pW8-@nE6-cB3^yU-0&hA5-qZx9#mK';
+}
+
+function getSignKey(): string {
+  return env('ADMIN_SIGN_KEY', 'twitchan-default-sign-key-change-in-prod');
 }
 
 function sha256(s: string): string {
   return crypto.createHash('sha256').update(s, 'utf8').digest('hex');
 }
 
-// Pre-computed hash of the default fallback password
-const DEFAULT_HASH = sha256('tw-7xQ9!kz#Lm2-vR4$pW8@nE6-cB3^yU0&hA5');
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
 
 export function verifyPassword(input: string): boolean {
-  const expected = getExpectedPassword();
-  // Constant-time compare
-  const a = Buffer.from(sha256(input));
-  const b = Buffer.from(sha256(expected));
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  return timingSafeEqualStr(sha256(input), sha256(getExpectedPassword()));
 }
 
-export async function createSession(): Promise<string> {
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 12); // 12h
-  await db.adminSession.create({ data: { token, expiresAt } });
-  return token;
+interface TokenPayload {
+  exp: number;
+  iat: number;
 }
 
-export async function verifySession(token?: string | null): Promise<boolean> {
+export function createSession(): string {
+  const payload: TokenPayload = {
+    iat: Date.now(),
+    exp: Date.now() + 1000 * 60 * 60 * 12, // 12h
+  };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', getSignKey()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+export function verifySession(token?: string | null): boolean {
   if (!token) return false;
-  const s = await db.adminSession.findUnique({ where: { token } });
-  if (!s) return false;
-  if (s.expiresAt.getTime() < Date.now()) {
-    await db.adminSession.delete({ where: { token } }).catch(() => {});
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const [body, sig] = parts;
+  const expected = crypto.createHmac('sha256', getSignKey()).update(body).digest('base64url');
+  if (!timingSafeEqualStr(sig, expected)) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as TokenPayload;
+    if (payload.exp < Date.now()) return false;
+    return true;
+  } catch {
     return false;
   }
-  return true;
 }
 
-export async function destroySession(token: string): Promise<void> {
-  await db.adminSession.delete({ where: { token } }).catch(() => {});
+export function destroySession(_token: string): void {
+  // Stateless tokens — no server-side destroy needed.
+  // Client should delete the cookie.
 }
 
 export function getTokenFromReq(req: Request): string | null {

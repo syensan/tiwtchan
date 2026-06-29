@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const token = getTokenFromReq(req as unknown as Request);
-  if (!(await verifySession(token))) {
+  if (!verifySession(token)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));

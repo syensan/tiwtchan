@@ -128,6 +128,19 @@ export default function AdminPanel({ locale, onChangeLocale }: Props) {
     }
   };
 
+  const deleteOne = async (id: string) => {
+    setBusy(true);
+    try {
+      await fetch(`/api/media?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast({ title: t(locale, 'deleted') });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!token) {
     return (
       <div className="max-w-md mx-auto p-6">
