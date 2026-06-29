@@ -1,52 +1,94 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const SITE_URL = 'https://twitchan.com';
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "twitchan.com — Curated Adult Media Gallery (18+)",
+    template: "%s | twitchan.com",
   },
+  description:
+    "twitchan.com is a lightweight, multilingual adult media gallery. Browse curated videos, watch in-site, download with one click. 18+ only. RTA labeled.",
+  keywords: [
+    "adult gallery", "18+", "RTA labeled", "video gallery", "twitchan",
+    "adult content", "multilingual adult site", "video downloader",
+  ],
+  applicationName: "twitchan.com",
+  authors: [{ name: "twitchan.com" }],
+  creator: "twitchan.com",
+  publisher: "twitchan.com",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
+  },
+  alternates: { canonical: SITE_URL },
   openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
     type: "website",
+    url: SITE_URL,
+    title: "twitchan.com — Curated Adult Media Gallery (18+)",
+    description: "Lightweight, multilingual adult media gallery with in-site player and one-click download. 18+ only.",
+    siteName: "twitchan.com",
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
+    title: "twitchan.com — Curated Adult Media Gallery (18+)",
+    description: "Lightweight, multilingual adult media gallery. 18+ only.",
+  },
+  category: "adult",
+  classification: "Adult 18+",
+  other: {
+    "rating": "adult",
+    "RATING": "RTA-5042-1996-1400-1577-RTA",
+    "distribution": "global",
+    "revisit-after": "1 day",
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
+  manifest: "/api/manifest",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
+  width: "device-width",
+  initialScale: 1,
+};
+
+const JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "twitchan.com",
+  url: SITE_URL,
+  description: "Curated adult media gallery. 18+ only.",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: `${SITE_URL}/?q={search_term_string}`,
+    "query-input": "required name=search_term_string",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: "twitchan.com",
+    url: SITE_URL,
   },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
-      >
+      <body className="antialiased bg-white text-neutral-900">
         {children}
         <Toaster />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(JSONLD) }}
+        />
       </body>
     </html>
   );

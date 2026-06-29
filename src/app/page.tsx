@@ -1,31 +1,234 @@
-'use client'
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Locale, LOCALES, LOCALE_NAMES, RTL_LOCALES, t } from '@/lib/i18n';
+import AgeGate from '@/components/AgeGate';
+import Header from '@/components/Header';
+import MediaCard, { type MediaItem } from '@/components/MediaCard';
+import VideoPlayer from '@/components/VideoPlayer';
+import AdminPanel from '@/components/AdminPanel';
+import About from '@/components/About';
+import Policy from '@/components/Policy';
+import { Ad, AdInserter } from '@/components/Ads';
+
+type Page = 'home' | 'about' | 'policy' | 'admin';
+const AGE_KEY = 'twitchan_age_ok_v1';
+const LOCALE_KEY = 'twitchan_locale_v1';
 
 export default function Home() {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      gap: '2rem',
-      padding: '1rem'
-    }}>
-      <div style={{
-        position: 'relative',
-        width: '6rem',
-        height: '6rem'
-      }}>
-        <img
-          src="/logo.svg"
-          alt="Z.ai Logo"
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain'
-          }}
-        />
+  const [ageOk, setAgeOk] = useState(false);
+  const [locale, setLocale] = useState<Locale>('en');
+  const [page, setPage] = useState<Page>('home');
+  const [items, setItems] = useState<MediaItem[]>([]);
+  const [page_, setPage_] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [current, setCurrent] = useState<MediaItem | null>(null);
+  const [initializing, setInitializing] = useState(true);
+
+  // Bootstrap: detect locale via /api/geo (or use saved)
+  useEffect(() => {
+    const savedAge = typeof window !== 'undefined' && localStorage.getItem(AGE_KEY) === '1';
+    const savedLocale = (typeof window !== 'undefined' && localStorage.getItem(LOCALE_KEY)) as Locale | null;
+    setAgeOk(savedAge);
+
+    if (savedLocale && LOCALES.includes(savedLocale)) {
+      setLocale(savedLocale);
+      setInitializing(false);
+    } else {
+      fetch('/api/geo')
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.locale && LOCALES.includes(j.locale)) setLocale(j.locale);
+        })
+        .catch(() => {})
+        .finally(() => setInitializing(false));
+    }
+  }, []);
+
+  // Update <html> dir + lang when locale changes
+  useEffect(() => {
+    const isRTL = RTL_LOCALES.includes(locale);
+    document.documentElement.lang = locale;
+    document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+    document.body.classList.toggle('rtl', isRTL);
+  }, [locale]);
+
+  const changeLocale = useCallback((l: Locale) => {
+    setLocale(l);
+    try { localStorage.setItem(LOCALE_KEY, l); } catch {}
+  }, []);
+
+  const enter = useCallback(() => {
+    setAgeOk(true);
+    try { localStorage.setItem(AGE_KEY, '1'); } catch {}
+  }, []);
+  const leave = useCallback(() => {
+    window.location.href = 'https://www.google.com';
+  }, []);
+
+  // Fetch media
+  const fetchPage = useCallback(async (p: number, append: boolean, q: string) => {
+    setLoading(true);
+    try {
+      const url = `/api/media?page=${p}&pageSize=15${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+      const r = await fetch(url);
+      const j = await r.json();
+      setItems((prev) => (append ? [...prev, ...(j.items || [])] : (j.items || [])));
+      setPage_(j.page || 1);
+      setTotalPages(j.pages || 1);
+      setTotal(j.total || 0);
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Reload when page or search changes (non-append)
+  useEffect(() => {
+    if (!ageOk || page !== 'home') return;
+    fetchPage(1, false, search);
+    setPage_(1);
+  }, [ageOk, page, search, fetchPage]);
+
+  const loadMore = useCallback(() => {
+    if (loading || page_ >= totalPages) return;
+    fetchPage(page_ + 1, true, search);
+  }, [loading, page_, totalPages, fetchPage, search]);
+
+  const watch = useCallback((it: MediaItem) => {
+    setCurrent(it);
+    fetch('/api/click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: it.id }),
+    }).catch(() => {});
+  }, []);
+
+  // Read URL ?m= or ?p=
+  useEffect(() => {
+    if (!ageOk) return;
+    const u = new URL(window.location.href);
+    const p = u.searchParams.get('p');
+    const m = u.searchParams.get('m');
+    if (p === 'about') setPage('about');
+    else if (p === 'policy') setPage('policy');
+    else if (p === 'admin') setPage('admin');
+    if (m) {
+      // Try to load this media and open player
+      fetch('/api/media?q=' + encodeURIComponent(m))
+        .then((r) => r.json())
+        .then((j) => {
+          const found = (j.items || []).find((x: MediaItem) => x.id === m);
+          if (found) setCurrent(found);
+        })
+        .catch(() => {});
+    }
+  }, [ageOk]);
+
+  const isRTL = RTL_LOCALES.includes(locale);
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-neutral-400 text-sm">Loading…</div>
       </div>
+    );
+  }
+
+  if (!ageOk) {
+    return (
+      <AgeGate
+        locale={locale}
+        onEnter={enter}
+        onLeave={leave}
+        onChangeLocale={changeLocale}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
+      <Header
+        locale={locale}
+        page={page}
+        onNav={(p) => setPage(p)}
+        onSearch={setSearch}
+        search={search}
+        onChangeLocale={changeLocale}
+      />
+
+      {/* Mobile top banner ad */}
+      <div className="sm:hidden">
+        <Ad zone="mobileBanner" className="my-0" />
+      </div>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4">
+        {page === 'home' && (
+          <>
+            {items.length === 0 && !loading && (
+              <div className="text-center py-20 text-neutral-400 text-sm">{t(locale, 'empty')}</div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+              {items.map((it, i) => (
+                <div key={it.id} className="contents">
+                  <MediaCard item={it} locale={locale} onWatch={watch} />
+                  {((i + 1) % 15 === 0) && (
+                    <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5">
+                      <Ad zone="nativeResponsive" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-center mt-8 mb-4 gap-3">
+              <button
+                onClick={() => fetchPage(Math.max(1, page_ - 1), false, search)}
+                disabled={page_ <= 1 || loading}
+                className="px-4 py-2 rounded-lg border border-neutral-300 text-sm disabled:opacity-40"
+              >
+                ← {t(locale, 'prev')}
+              </button>
+              <span className="text-sm text-neutral-600">
+                {t(locale, 'page')} {page_} {t(locale, 'of')} {totalPages || 1} · {total}
+              </span>
+              <button
+                onClick={loadMore}
+                disabled={page_ >= totalPages || loading}
+                className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm disabled:opacity-40"
+              >
+                {loading ? t(locale, 'loading') : t(locale, 'next')} →
+              </button>
+            </div>
+          </>
+        )}
+
+        {page === 'about' && <About locale={locale} />}
+        {page === 'policy' && <Policy locale={locale} />}
+        {page === 'admin' && <AdminPanel locale={locale} onChangeLocale={changeLocale} />}
+      </main>
+
+      <footer className="mt-auto border-t border-neutral-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-6 text-center">
+          <p className="text-xs text-neutral-500 mb-2">
+            © {new Date().getFullYear()} twitchan.com · {t(locale, 'footerRights')}
+          </p>
+          <p className="text-[11px] text-neutral-400 mb-2 max-w-2xl mx-auto leading-relaxed">
+            {t(locale, 'footerDisclaimer')}
+          </p>
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <span className="tag-chip">18+</span>
+            <span className="tag-chip">RTA-5042</span>
+            <button onClick={() => setPage('about')} className="tag-chip hover:bg-neutral-200">{t(locale, 'nav_about')}</button>
+            <button onClick={() => setPage('policy')} className="tag-chip hover:bg-neutral-200">{t(locale, 'nav_policy')}</button>
+          </div>
+        </div>
+      </footer>
+
+      <VideoPlayer item={current} locale={locale} onClose={() => setCurrent(null)} />
     </div>
-  )
+  );
 }

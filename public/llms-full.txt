@@ -1,0 +1,59 @@
+# twitchan.com — Full content for LLMs
+
+# Overview
+twitchan.com is a curated, lightweight, multilingual adult media gallery that aggregates publicly-listed video links from a third-party provider (skbj.tv). The site is for adults 18+ only and is labeled with RTA-5042.
+
+# Pages
+
+## Home (/)
+- 15-item media grid
+- Search box
+- Pagination (Next/Previous) with "Load more" appended behavior on Next
+- Native responsive ad every 15 items
+- Mobile banner (300x100) at top on small screens
+- Mobile floating ad
+
+## About (/?p=about)
+Explains what twitchan.com is: a lightweight multilingual aggregator. Notes that all content is third-party embedded, no hosting, no tracking.
+
+## Policy (/?p=policy)
+7-section policy covering:
+1. Age requirement (18+, RTA labeled)
+2. Content source & ownership (no hosting, third-party embeds)
+3. Privacy (no tracking cookies, only admin session cookie, IP used only for locale detection)
+4. Advertising (JuicyAds, third-party cookies possible, ads marked as sponsored)
+5. Takedown / DMCA (contact original host or us)
+6. Acceptable use (no bypass, no excessive scraping)
+7. Disclaimer (as-is, no warranties)
+
+## Admin (/?p=admin)
+Password-protected panel. Features:
+- Single URL add (auto-scrapes title/thumbnail/MP4 from the source page)
+- Bulk add (one URL per line)
+- Full scrape (1-10 pages from skbj.tv homepage)
+- Clear all media
+
+## APIs
+- GET /api/geo → returns visitor IP, country, suggested locale
+- GET /api/media?page=1&pageSize=15&q=... → paginated media list
+- POST /api/click { id } → increment view counter
+- GET /api/download?id=... → proxied download (attachment disposition)
+- POST /api/admin { password } → login, sets httpOnly cookie + returns bearer token
+- GET /api/admin → verify session
+- DELETE /api/admin → logout
+- POST /api/admin/add { url, title?, thumbnail?, videoUrl? } → add single
+- POST /api/admin/bulk { urls: string } → bulk add
+- POST /api/admin/scrape { pages: 1-10 } → scrape source
+- DELETE /api/media → clear all (admin only)
+- GET /api/sitemap → sitemap.xml
+- GET /api/robots → robots.txt
+- GET /api/manifest → PWA manifest
+
+# Supported locales
+en, ja, zh, ko, es, fr, de, pt, ru, it, ar (RTL), hi, th, vi, id, tr, pl, nl
+
+# Tech stack
+Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui (New York) · Prisma + SQLite · Netlify (with Netlify Functions for password gate)
+
+# Adult content notice
+This site embeds adult content from third-party providers. All models appearing on the source site are stated by the source to be 18 years of age or older. twitchan.com does not host, store, or transmit any media files.
