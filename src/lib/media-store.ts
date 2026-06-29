@@ -222,3 +222,17 @@ export async function incrementViews(id: string): Promise<void> {
     await store.set('media:views', JSON.stringify(views));
   } catch {}
 }
+
+// Record a per-visitor view (deduplicated). visitorHash is the SHA-256 of
+// the visitor's random ID, so we never store the raw ID.
+export async function recordView(mediaId: string, visitorHash: string): Promise<void> {
+  try {
+    const store = await getBlobsStore();
+    if (!store) return;
+    // Use a composite key: mediaId:visitorHash
+    const key = `view:${mediaId}:${visitorHash}`;
+    const existing = await store.get(key);
+    if (existing) return; // already viewed — skip
+    await store.set(key, JSON.stringify({ at: Date.now() }));
+  } catch {}
+}

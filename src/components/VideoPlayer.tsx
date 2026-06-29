@@ -25,13 +25,14 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
 
   if (!item) return null;
 
-  const handleDownload = async () => {
-    try {
-      // Hit click counter
-      fetch('/api/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id }) });
-      // Open download endpoint in new tab
-      window.open(`/api/download?id=${encodeURIComponent(item.id)}`, '_blank');
-    } catch {}
+  const handleDownload = () => {
+    // Hit click counter
+    fetch('/api/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id }) }).catch(() => {});
+    // Open the source video page in a new tab — the user can click the site's
+    // native download button there. (MP4 URLs are IP-bound so we can't proxy.)
+    if (item.sourceUrl) {
+      window.open(item.sourceUrl, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const handleCopy = () => {
@@ -40,8 +41,9 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // Determine video source
-  const src = item.videoUrl || item.embedUrl || item.sourceUrl;
+  // Use the embed URL in an iframe — works from the user's browser since the
+  // 85xo.com embed page is accessible without Cloudflare block from visitor IPs.
+  const embedSrc = item.embedUrl || item.sourceUrl;
 
   return (
     <div className="fixed inset-0 z-[90] bg-black/80 flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
@@ -64,13 +66,14 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
 
         <div className="flex-1 overflow-auto">
           <div className="bg-black aspect-video w-full">
-            {src ? (
+            {embedSrc ? (
               <iframe
-                src={src}
+                src={embedSrc}
                 className="w-full h-full border-0"
                 allowFullScreen
-                allow="autoplay; encrypted-media; fullscreen"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                 referrerPolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-white/70 text-sm">
@@ -84,6 +87,7 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
               <button
                 onClick={handleDownload}
                 className="inline-flex items-center gap-1.5 bg-neutral-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-neutral-800 transition"
+                title="Open the source page in a new tab to download"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
@@ -107,7 +111,13 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
                 </a>
               )}
             </div>
-            <p className="text-xs text-neutral-500">{item.views || 0} views · {item.category || 'main'}</p>
+            <p className="text-xs text-neutral-500">
+              {item.views || 0} views · {item.category || 'main'}
+              {item.duration ? ` · ${item.duration}` : ''}
+            </p>
+            <p className="text-[11px] text-neutral-400 mt-2 leading-relaxed">
+              ⓘ Video is embedded from a third-party provider. The download button opens the source page where you can use the site's native download option.
+            </p>
 
             {/* Video ad underneath */}
             <Ad zone="video" className="mt-4" />

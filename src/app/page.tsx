@@ -10,6 +10,7 @@ import AdminPanel from '@/components/AdminPanel';
 import About from '@/components/About';
 import Policy from '@/components/Policy';
 import { Ad, AdInserter } from '@/components/Ads';
+import { useVisitor } from '@/hooks/use-visitor';
 
 type Page = 'home' | 'about' | 'policy' | 'admin';
 const AGE_KEY = 'twitchan_age_ok_v1';
@@ -27,6 +28,7 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<MediaItem | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const visitor = useVisitor();
 
   // Bootstrap: detect locale via /api/geo (or use saved)
   useEffect(() => {
@@ -69,12 +71,19 @@ export default function Home() {
     window.location.href = 'https://www.google.com';
   }, []);
 
+  // Helper: build headers with visitor token
+  const apiHeaders = useCallback((extra: Record<string, string> = {}) => {
+    const h: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
+    if (visitor?.token) h['X-Visitor-Token'] = visitor.token;
+    return h;
+  }, [visitor]);
+
   // Fetch media
   const fetchPage = useCallback(async (p: number, append: boolean, q: string) => {
     setLoading(true);
     try {
       const url = `/api/media?page=${p}&pageSize=15${q ? `&q=${encodeURIComponent(q)}` : ''}`;
-      const r = await fetch(url);
+      const r = await fetch(url, { headers: apiHeaders() });
       const j = await r.json();
       setItems((prev) => (append ? [...prev, ...(j.items || [])] : (j.items || [])));
       setPage_(j.page || 1);
@@ -84,7 +93,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiHeaders]);
 
   // Reload when page or search changes (non-append)
   useEffect(() => {
@@ -102,10 +111,10 @@ export default function Home() {
     setCurrent(it);
     fetch('/api/click', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders(),
       body: JSON.stringify({ id: it.id }),
     }).catch(() => {});
-  }, []);
+  }, [apiHeaders]);
 
   // Read URL ?m= or ?p=
   useEffect(() => {
@@ -118,7 +127,7 @@ export default function Home() {
     else if (p === 'admin') setPage('admin');
     if (m) {
       // Try to load this media and open player
-      fetch('/api/media?q=' + encodeURIComponent(m))
+      fetch('/api/media?q=' + encodeURIComponent(m), { headers: apiHeaders() })
         .then((r) => r.json())
         .then((j) => {
           const found = (j.items || []).find((x: MediaItem) => x.id === m);
@@ -126,7 +135,7 @@ export default function Home() {
         })
         .catch(() => {});
     }
-  }, [ageOk]);
+  }, [ageOk, apiHeaders]);
 
   const isRTL = RTL_LOCALES.includes(locale);
 

@@ -1,9 +1,23 @@
 # twitchan.com — for LLMs
 
-> Curated, lightweight, multilingual adult media gallery. 18+ only.
+> Lightweight, multilingual adult video gallery. 18+ only.
 
 ## Purpose
-twitchan.com aggregates publicly-listed video links from a third-party provider (skbj.tv) and presents them in a lightweight, fast, multilingual gallery. The site does not host media files — it embeds videos via the provider's public URLs and proxies downloads through a server-side endpoint that strips referer and forces attachment.
+twitchan.com aggregates video metadata from the **official Hentai Ocean API** (`https://hentaiocean.com/api`) and embeds videos via the official Embed API (`<iframe src="https://hentaiocean.com/embed/{slug}?la=1">`). The site does not host media files — all video playback happens through the source site's iframe embed.
+
+## Data source
+This site uses the official public API provided by Hentai Ocean. No HTML scraping. Endpoints used:
+- `GET /api?action=recent` — JSON array of all 213 videos (id, urlname, videoname, description, dates, coverimg, recentrelease)
+- `GET /api?action=hentai&slug={slug}` — full video info + genres
+- `GET /embed/{slug}?la=1` — iframe-embeddable player (`?la=1` = reduced ads)
+- `GET /thumbnail/{slug}.webp` — 16:9 video thumbnail
+- `GET /assets/cover/{coverimg}` — DVD cover image
+- `GET /watch/{slug}` — source video page (for download link)
+
+The API is documented and provided by Hentai Ocean for building third-party websites ("create your own hentai website or project using the Hentai Ocean API").
+
+## Anonymous visitor encryption
+Each visitor gets a random 128-bit ID generated client-side (stored in localStorage). The ID is HMAC-SHA256 signed server-side (using `VISITOR_SIGN_KEY` env var), producing a 30-day token. Only the SHA-256 hash of the visitor ID is stored on the server (for view deduplication) — the raw ID never leaves the browser unencrypted. No PII (name, email, IP) is collected.
 
 ## Audience
 Adults 18+ only. The site uses an age gate on first visit and is labeled with RTA-5042 metadata.
@@ -12,25 +26,26 @@ Adults 18+ only. The site uses an age gate on first visit and is labeled with RT
 18 languages auto-selected by visitor IP geolocation: English, 日本語, 中文, 한국어, Español, Français, Deutsch, Português, Русский, Italiano, العربية, हिन्दी, ไทย, Tiếng Việt, Bahasa Indonesia, Türkçe, Polski, Nederlands. Manual override is always available in the header.
 
 ## Main features
-- Grid gallery with 15 items per page
-- In-site iframe player
-- One-click download (server-proxied, attachment disposition)
+- Grid gallery with 15 items per page (infinite scroll via "Next" button)
+- In-site iframe video player (loads Hentai Ocean's official embed with `?la=1` reduced ads)
+- Download button opens the source page in a new tab
 - Search by title
 - Native responsive ads every 15 items
 - Mobile floating ad
 - 300x100 mobile banner
 - 308x286 video ad inside the player
 - Hidden admin panel at `/?p=admin` (4-segment password)
-  - Add single by URL
+  - Add single by URL (calls HO API to fetch metadata)
   - Bulk add (one URL per line)
-  - Scrape source homepage (up to 10 pages)
+  - Full catalog scrape via `GET /api?action=recent` (213 videos)
   - Clear all media
+- Anonymous visitor encryption (HMAC-SHA256 signed tokens)
 
 ## Tech
-Next.js 16 App Router + TypeScript + Tailwind 4 + Prisma + SQLite. Deployed on Netlify with Netlify Functions handling the admin auth gate.
+Next.js 16 App Router + TypeScript + Tailwind 4. No database — uses JSON seed file (`data/media.json`) + Netlify Blobs for admin-added items. Visitor tokens are stateless HMAC-signed. Deployed on Netlify with Netlify Functions handling the admin auth gate.
 
 ## Content policy
-All media is sourced from third-party providers. We do not host, store, or cache media. Takedown requests are honored — see /?p=policy.
+All media is sourced from Hentai Ocean via their official public API. We do not host, store, or cache media — only embed via iframe. Takedown requests are honored — see /?p=policy.
 
 ## Important URLs
 - Home: https://twitchan.com/

@@ -26,9 +26,17 @@ export default function Policy({ locale }: { locale: Locale }) {
         <section>
           <h2 className="text-base font-semibold text-neutral-900">3. Privacy</h2>
           <p>
-            We do not use tracking cookies. The only cookie set is a session cookie for admin authentication (httpOnly, 12-hour expiration).
+            We do not use tracking cookies. Two cookies are set: a session cookie for admin authentication (httpOnly, 12-hour expiration)
+            and a visitor token cookie (httpOnly, 30-day expiration) used for anonymous view deduplication.
             IP addresses are used solely for automatic locale detection (language guessing based on country) and are not stored long-term.
             We do not sell or share any user data with third parties. No analytics scripts are loaded.
+          </p>
+          <p className="mt-2">
+            <strong>Anonymous visitor encryption.</strong> Each visitor is assigned a random 128-bit ID generated client-side
+            (using <code>crypto.getRandomValues</code>) and stored only in your browser's localStorage. This ID is sent to our server
+            and signed with HMAC-SHA256 using a server-side secret, producing an opaque token. Only the SHA-256 hash of your visitor ID
+            is ever stored on the server (for view deduplication) — the raw ID never leaves your browser unencrypted.
+            No personally identifiable information (name, email, IP) is collected or stored.
           </p>
         </section>
         <section>

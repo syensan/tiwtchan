@@ -1,18 +1,19 @@
-// Test the scraper end-to-end: scrape 2 pages from skbj.tv and insert into DB
-process.env.DATABASE_URL = 'file:/home/z/my-project/db/custom.db';
-const { db } = await import('/home/z/my-project/src/lib/db.ts');
+// Test the new hentaiocean.com API scraper
 const { scrapeSource } = await import('/home/z/my-project/src/lib/scraper.ts');
 
-console.log('Starting scrape...');
-const result = await scrapeSource(5);
+console.log('Scraping hentaiocean.com via official API (with genre enrichment)...');
+const result = await scrapeSource(1, { enrichGenres: true });
 console.log('Result:', result);
 
-const count = await db.media.count();
-console.log('Total media in DB:', count);
-
-const sample = await db.media.findMany({ take: 3, orderBy: { createdAt: 'desc' } });
+const { listMedia } = await import('/home/z/my-project/src/lib/media-store.ts');
+const data = await listMedia({ page: 1, pageSize: 5 });
+console.log('Total in store:', data.total);
 console.log('Sample:');
-for (const m of sample) {
-  console.log(' -', m.title, '|', m.thumbnail, '|', m.duration, '|', m.sourceUrl);
+for (const m of data.items) {
+  console.log(' -', m.title);
+  console.log('   thumb:', m.thumbnail);
+  console.log('   embed:', m.embedUrl);
+  console.log('   src:  ', m.sourceUrl);
+  console.log('   cat:  ', m.category);
 }
 process.exit(0);

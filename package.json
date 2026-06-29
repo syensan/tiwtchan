@@ -6,7 +6,9 @@
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "scrape": "bunx tsx scripts/test-scrape.mjs",
+    "promote": "node scripts/promote-seed.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
