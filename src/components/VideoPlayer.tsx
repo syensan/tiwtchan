@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Locale, t } from '@/lib/i18n';
 import type { MediaItem } from './MediaCard';
-import { Ad, ResponsiveBanner } from './Ads';
+import { Ad, ResponsiveBanner } from '@/components/Ads';
 
 interface Props {
   item: MediaItem | null;
@@ -31,7 +31,10 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: item.id }),
     }).catch(() => {});
-    if (item.sourceUrl) {
+    // If we have a direct MP4, use our /api/download proxy (forces attachment)
+    if (item.videoUrl) {
+      window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
+    } else if (item.sourceUrl) {
       window.open(item.sourceUrl, '_blank', 'noopener,noreferrer');
     }
   };
@@ -42,7 +45,9 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const embedSrc = item.embedUrl || item.sourceUrl;
+  // Decision: use native <video> if we have a direct MP4 (no source-site ads).
+  // Fall back to iframe embed only if MP4 resolution failed.
+  const hasDirectMp4 = !!item.videoUrl;
 
   return (
     <div
@@ -67,14 +72,23 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
         </div>
 
         <div className="flex-1 overflow-auto">
-          {/* 16:9 video iframe (HentaiOcean embed) */}
-          <div
-            className="w-full bg-black"
-            style={{ position: 'relative', paddingBottom: 'calc(56.25% + 40px)', height: 0 }}
-          >
-            {embedSrc ? (
+          {/* 16:9 video area */}
+          <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9' }}>
+            {hasDirectMp4 ? (
+              // Native HTML5 player — no third-party ad scripts loaded
+              <video
+                src={`/api/download?id=${encodeURIComponent(item.id)}`}
+                className="w-full h-full"
+                controls
+                autoPlay
+                playsInline
+                preload="metadata"
+                controlsList="nodownload"
+              />
+            ) : item.embedUrl ? (
+              // Fallback: iframe embed (loads source site's player — may include their ads)
               <iframe
-                src={embedSrc}
+                src={item.embedUrl}
                 style={{ position: 'absolute', width: '100%', height: '100%', left: 0, top: 0, border: 0 }}
                 allowFullScreen
                 allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
@@ -93,7 +107,6 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
               <button
                 onClick={handleDownload}
                 className="inline-flex items-center gap-1.5 bg-neutral-900 text-white text-sm px-4 py-2 rounded-lg hover:bg-neutral-800 transition"
-                title="Open the source page in a new tab to download"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
