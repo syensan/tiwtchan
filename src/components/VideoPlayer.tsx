@@ -14,6 +14,8 @@ interface Props {
 export default function VideoPlayer({ item, locale, onClose }: Props) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
+    // Only lock body scroll when the player is actually open (item !== null)
+    if (!item) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -21,7 +23,7 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [onClose]);
+  }, [onClose, item]);
 
   if (!item) return null;
 

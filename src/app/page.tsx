@@ -103,8 +103,21 @@ export default function Home() {
 
   const loadMore = useCallback(() => {
     if (loading || page_ >= totalPages) return;
-    fetchPage(page_ + 1, true, search);
-  }, [loading, page_, totalPages, fetchPage, search]);
+    // Remember current scroll position as the "top of new content" anchor
+    const oldItemCount = items.length;
+    fetchPage(page_ + 1, true, search).then(() => {
+      // After new items are appended, scroll to show the first new item
+      setTimeout(() => {
+        const cards = document.querySelectorAll('article');
+        if (cards.length > oldItemCount) {
+          const firstNewCard = cards[oldItemCount] as HTMLElement;
+          if (firstNewCard) {
+            firstNewCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      }, 200);
+    });
+  }, [loading, page_, totalPages, fetchPage, search, items.length]);
 
   const watch = useCallback((it: MediaItem) => {
     setCurrent(it);
