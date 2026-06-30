@@ -9,10 +9,6 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[functions]
-  node_bundler = "esbuild"
-  directory = "netlify/functions"
-
 # Security headers
 [[headers]]
   for = "/*"
