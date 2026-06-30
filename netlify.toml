@@ -30,24 +30,21 @@
     Access-Control-Allow-Origin = "*"
 
 [[headers]]
-  for = "/api/admin*"
+  for = "/sitemap.xml"
   [headers.values]
-    Cache-Control = "no-store"
+    Content-Type = "application/xml; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/robots.txt"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
 
 [[headers]]
   for = "/_next/static/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
-
-[[redirects]]
-  from = "/sitemap.xml"
-  to = "/api/sitemap"
-  status = 200
-
-[[redirects]]
-  from = "/robots.txt"
-  to = "/api/robots"
-  status = 200
 
 [[redirects]]
   from = "/manifest.json"
