@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // JuicyAds zone IDs (user-provided configuration)
 export const AD_ZONES = {
@@ -21,92 +21,48 @@ const ZONE_SIZES: Record<AdZone, { w: number; h: number; label: string }> = {
   native: { w: 108, h: 140, label: 'Native' },
 };
 
-let jadsLoaded = false;
-function ensureJads() {
-  if (jadsLoaded) return;
-  if (typeof window === 'undefined') return;
-  if (!(window as any).adsbyjuicy) (window as any).adsbyjuicy = [];
-  if (!document.querySelector('script[src*="poweredby.jads.co/js/jads.js"]')) {
-    const s = document.createElement('script');
-    s.src = 'https://poweredby.jads.co/js/jads.js';
-    s.async = true;
-    s.setAttribute('data-cfasync', 'false');
-    document.head.appendChild(s);
-  }
-  jadsLoaded = true;
-}
-
-// Counter for unique ins IDs when the same zone appears multiple times
-let adInstanceCounter = 0;
-
 interface AdProps {
   zone: AdZone;
   className?: string;
 }
 
+// Render JuicyAds via direct iframe to adshow.php.
+// This bypasses jads.js (which doesn't work reliably in React SPAs because
+// it relies on document.write / initial page parse timing).
+// The iframe loads the ad content directly from JuicyAds' ad server.
 export function Ad({ zone, className = '' }: AdProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const zoneId = AD_ZONES[zone];
   const sz = ZONE_SIZES[zone];
-  // Stable unique ID for this ad instance (in case the same zone appears multiple times)
-  const instanceIdRef = useRef<string>(`juicy_${zoneId}_${++adInstanceCounter}`);
-
-  useEffect(() => {
-    ensureJads();
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Clear any previous content
-    container.innerHTML = '';
-
-    // Create the <ins> element exactly as JuicyAds documentation specifies.
-    // The id attribute should be the zone ID. For duplicate zones, we use a
-    // unique suffix but keep the data-adzone attribute for jads.js to match.
-    const ins = document.createElement('ins');
-    ins.id = instanceIdRef.current;
-    ins.setAttribute('data-width', String(sz.w));
-    ins.setAttribute('data-height', String(sz.h));
-    ins.setAttribute('data-adzone', String(zoneId));
-    ins.style.display = 'inline-block';
-    ins.style.width = sz.w + 'px';
-    ins.style.height = sz.h + 'px';
-    ins.style.maxWidth = '100%';
-    container.appendChild(ins);
-
-    // Push to the JuicyAds queue. jads.js will find this <ins> by its data-adzone
-    // attribute and render the ad.
-    (window as any).adsbyjuicy = (window as any).adsbyjuicy || [];
-    (window as any).adsbyjuicy.push({ adzone: zoneId });
-
-    // Re-push after a short delay in case jads.js hadn't loaded yet when we
-    // first pushed. This is a common pattern for async-loaded ad scripts.
-    const timer = setTimeout(() => {
-      (window as any).adsbyjuicy = (window as any).adsbyjuicy || [];
-      (window as any).adsbyjuicy.push({ adzone: zoneId });
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [zoneId, sz.w, sz.h]);
 
   return (
     <div
-      ref={containerRef}
       className={`ad-container flex items-center justify-center ${className}`}
-      style={{ minHeight: sz.h, minWidth: Math.min(sz.w, 320) }}
+      style={{ width: sz.w, height: sz.h, maxWidth: '100%' }}
       aria-label={`Advertisement (${sz.label} ${sz.w}x${sz.h})`}
-    />
+    >
+      <iframe
+        src={`https://poweredby.jads.co/adshow.php?adzone=${zoneId}`}
+        title={`Ad ${sz.label}`}
+        width={sz.w}
+        height={sz.h}
+        style={{ border: 0, display: 'block', maxWidth: '100%' }}
+        scrolling="no"
+        marginWidth={0}
+        marginHeight={0}
+        allowFullScreen
+      />
+    </div>
   );
 }
 
 // Conditional desktop / mobile banner
 export function ResponsiveBanner({ className = '' }: { className?: string }) {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, []);
-  return <Ad zone={isMobile ? 'mobileBanner' : 'pcBanner'} className={className} />;
+  const [device] = useState<'pc' | 'mobile'>(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(max-width: 768px)').matches ? 'mobile' : 'pc';
+    }
+    return 'pc';
+  });
+
+  return <Ad zone={device === 'mobile' ? 'mobileBanner' : 'pcBanner'} className={className} />;
 }

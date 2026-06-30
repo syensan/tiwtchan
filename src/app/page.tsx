@@ -194,19 +194,14 @@ export default function Home() {
               {items.map((it, i) => (
                 <div key={it.id} className="contents">
                   <MediaCard item={it} locale={locale} onWatch={watch} />
-                  {/* Insert native ad every 12 items */}
-                  {((i + 1) % 12 === 0) && (
+                  {/* Insert native ad ONCE after the 12th item */}
+                  {i === 11 && (
                     <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 flex justify-center py-2">
                       <Ad zone="native" />
                     </div>
                   )}
                 </div>
               ))}
-            </div>
-
-            {/* Mid-page banner after every page of items */}
-            <div className="my-6 flex justify-center">
-              <ResponsiveBanner />
             </div>
 
             {/* Pagination — guaranteed visible, NOT sticky-footer */}
@@ -238,10 +233,6 @@ export default function Home() {
 
       <footer className="mt-auto border-t border-neutral-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 py-6 text-center">
-          {/* Bottom banner */}
-          <div className="mb-4 flex justify-center">
-            <ResponsiveBanner />
-          </div>
           <p className="text-xs text-neutral-500 mb-2">
             © {new Date().getFullYear()} twitchan.com · {t(locale, 'footerRights')}
           </p>
