@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Locale, t } from '@/lib/i18n';
 import type { MediaItem } from './MediaCard';
-import { Ad } from './Ads';
+import { Ad, ResponsiveBanner } from './Ads';
 
 interface Props {
   item: MediaItem | null;
@@ -26,10 +26,11 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
   if (!item) return null;
 
   const handleDownload = () => {
-    // Hit click counter
-    fetch('/api/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id }) }).catch(() => {});
-    // Open the source video page in a new tab — the user can click the site's
-    // native download button there. (MP4 URLs are IP-bound so we can't proxy.)
+    fetch('/api/click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id }),
+    }).catch(() => {});
     if (item.sourceUrl) {
       window.open(item.sourceUrl, '_blank', 'noopener,noreferrer');
     }
@@ -41,17 +42,18 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // Use the embed URL in an iframe — works from the user's browser since the
-  // 85xo.com embed page is accessible without Cloudflare block from visitor IPs.
   const embedSrc = item.embedUrl || item.sourceUrl;
 
   return (
-    <div className="fixed inset-0 z-[90] bg-black/80 flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[90] bg-black/80 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
-        className="bg-white rounded-xl max-w-4xl w-full max-h-[95vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl max-w-4xl w-full my-4 sm:my-8 overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-3 border-b border-neutral-200">
+        <div className="flex items-center justify-between p-3 border-b border-neutral-200 sticky top-0 bg-white z-10">
           <h2 className="text-sm font-semibold text-neutral-900 truncate pr-3">{item.title}</h2>
           <button
             onClick={onClose}
@@ -65,18 +67,22 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
         </div>
 
         <div className="flex-1 overflow-auto">
-          <div className="bg-black aspect-video w-full">
+          {/* 16:9 video iframe (HentaiOcean embed) */}
+          <div
+            className="w-full bg-black"
+            style={{ position: 'relative', paddingBottom: 'calc(56.25% + 40px)', height: 0 }}
+          >
             {embedSrc ? (
               <iframe
                 src={embedSrc}
-                className="w-full h-full border-0"
+                style={{ position: 'absolute', width: '100%', height: '100%', left: 0, top: 0, border: 0 }}
                 allowFullScreen
                 allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                 referrerPolicy="no-referrer"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-white/70 text-sm">
+              <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
                 {t(locale, 'empty')}
               </div>
             )}
@@ -115,12 +121,21 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
               {item.views || 0} views · {item.category || 'main'}
               {item.duration ? ` · ${item.duration}` : ''}
             </p>
-            <p className="text-[11px] text-neutral-400 mt-2 leading-relaxed">
-              ⓘ Video is embedded from a third-party provider. The download button opens the source page where you can use the site's native download option.
-            </p>
 
-            {/* Video ad underneath */}
-            <Ad zone="video" className="mt-4" />
+            {/* In-video ad (308x286) — high CPM placement right under the player */}
+            <div className="mt-4 border-t border-neutral-200 pt-4 flex justify-center">
+              <Ad zone="inVideo" />
+            </div>
+
+            {/* Below-video image ad (250x250) */}
+            <div className="mt-4 flex justify-center">
+              <Ad zone="imageSquare" />
+            </div>
+
+            {/* Responsive banner (468x60 PC / 300x100 mobile) */}
+            <div className="mt-4 flex justify-center">
+              <ResponsiveBanner />
+            </div>
           </div>
         </div>
       </div>

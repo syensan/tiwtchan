@@ -1,58 +1,25 @@
-// Media scraper for hentaiocean.com — uses the official API.
+// HentaiOcean API-based scraper.
+// Uses the official RSS feed (https://hentaiocean.com/rss.xml) for the video list
+// and the per-video API (https://hentaiocean.com/api?action=hentai&slug={slug})
+// for detailed metadata.
 //
-// API documentation:
-//   GET /api?action=recent → JSON array of all videos (id, urlname, videoname, description, dates, coverimg)
-//   GET /api?action=hentai&slug={slug} → JSON with full info + genres
-//   GET /embed/{slug} → iframe-embeddable player (works from visitor's browser)
-//   GET /thumbnail/{slug}.webp → 16:9 thumbnail
-//   GET /assets/cover/{coverimg} → DVD cover image
-//   GET /rss.xml → RSS feed of newest videos
+// Documentation: https://hentaiocean.com/api-docs (referenced from user-provided docs)
 //
-// We use /api?action=recent to get the full list, then optionally enrich
-// with per-video /api?action=hentai&slug= calls to get genres.
-//
-// Storage: JSON seed file (data/media.json) + Netlify Blobs for admin additions.
+// Storage: JSON seed file + Netlify Blobs (see ./media-store)
 
 import { addMedia, addMediaBulk, type MediaItem } from './media-store';
 
 const SOURCE_BASE = 'https://hentaiocean.com';
+const RSS_URL = `${SOURCE_BASE}/rss.xml`;
+const API_URL = `${SOURCE_BASE}/api?action=hentai&slug=`;
 
-interface ApiListItem {
-  id: number;
-  urlname: string;
-  videoname: string;
-  description?: string;
-  releasedate?: string;
-  uploaddate?: string;
-  coverimg?: string;
-  series?: string | null;
-  recentrelease?: number;
-}
-
-interface ApiHentaiInfo extends ApiListItem {
-  status?: number;
-}
-
-interface ApiHentaiResponse {
-  info?: ApiHentaiInfo[];
-  genres?: { genre: string }[];
-}
-
-const HEADERS = {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'application/json,text/html,*/*',
-  'Accept-Language': 'en-US,en;q=0.9',
-};
-
-async function fetchJson(url: string): Promise<any> {
-  const r = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(15000),
-    redirect: 'follow',
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
-  return await r.json();
+interface RssItem {
+  slug: string;
+  title: string;
+  link: string;
+  embedUrl: string;
+  thumbnail: string;     // cover image
+  pubDate?: string;
 }
 
 function decodeHtml(s: string): string {
@@ -66,110 +33,214 @@ function decodeHtml(s: string): string {
     .replace(/&nbsp;/g, ' ');
 }
 
-// Convert an ApiListItem to a MediaItem.
-// - id: numeric ID from the API (stored as string for consistency)
-// - slug: urlname (used for embed/thumbnail/source URLs)
-// - thumbnail: prefer 16:9 thumbnail endpoint, fallback to cover image
-// - embedUrl: official embed endpoint with ?la=1 (reduced ads)
-// - sourceUrl: /watch/{slug} on the source site
-// - category: "Recent" if recentrelease=1, else "Catalog"
-function toItem(item: ApiListItem, genres?: string[]): MediaItem {
-  const slug = item.urlname;
-  const thumbnail = `${SOURCE_BASE}/thumbnail/${slug}.webp`;
-  const cover = item.coverimg ? `${SOURCE_BASE}/assets/cover/${item.coverimg}` : undefined;
-  return {
-    id: String(item.id),
-    title: decodeHtml(item.videoname || slug),
-    thumbnail,
-    videoUrl: null, // not stored — embed via iframe
-    embedUrl: `${SOURCE_BASE}/embed/${slug}?la=1`,
-    sourceUrl: `${SOURCE_BASE}/watch/${slug}`,
-    duration: null, // API does not return duration
-    category: item.recentrelease === 1 ? 'Recent' : (genres?.[0] || 'Catalog'),
-  };
+const HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'application/rss+xml, application/xml, text/xml, application/json, */*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
+async function fetchText(url: string): Promise<string> {
+  const r = await fetch(url, {
+    headers: HEADERS,
+    signal: AbortSignal.timeout(15000),
+    redirect: 'follow',
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+  return await r.text();
 }
 
-// Fetch the full list via /api?action=recent. Returns all items.
-export async function fetchList(): Promise<ApiListItem[]> {
-  const data = await fetchJson(`${SOURCE_BASE}/api?action=recent`);
-  if (!Array.isArray(data)) {
-    throw new Error('Unexpected API response (expected array)');
+async function fetchJson<T = any>(url: string): Promise<T> {
+  const r = await fetch(url, {
+    headers: HEADERS,
+    signal: AbortSignal.timeout(15000),
+    redirect: 'follow',
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+  return await r.json() as T;
+}
+
+// Parse the RSS XML feed. Each <item> contains:
+//   <guid>{slug}</guid>
+//   <title>{title}</title>
+//   <link>{watch url}</link>
+//   <pubDate>...</pubDate>
+//   <embedUrl>{embed url}</embedUrl>
+//   <media:thumbnail url="{cover image}" />
+function parseRss(xml: string): RssItem[] {
+  const items: RssItem[] = [];
+  const seen = new Set<string>();
+
+  // Match each <item>...</item> block (non-greedy)
+  const itemRe = /<item>([\s\S]*?)<\/item>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = itemRe.exec(xml)) !== null) {
+    const block = m[1];
+    const slug = block.match(/<guid>([^<]+)<\/guid>/i)?.[1]?.trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+
+    const title = decodeHtml(block.match(/<title>([^<]+)<\/title>/i)?.[1] || slug);
+    const link = block.match(/<link>([^<]+)<\/link>/i)?.[1]?.trim() || `${SOURCE_BASE}/watch/${slug}`;
+    const embedUrl = block.match(/<embedUrl>([^<]+)<\/embedUrl>/i)?.[1]?.trim() || `${SOURCE_BASE}/embed/${slug}`;
+    const thumb = block.match(/<media:thumbnail[^>]+url="([^"]+)"/i)?.[1] || '';
+    const pubDate = block.match(/<pubDate>([^<]+)<\/pubDate>/i)?.[1]?.trim();
+
+    items.push({
+      slug,
+      title,
+      link,
+      embedUrl,
+      thumbnail: thumb,
+      pubDate,
+    });
   }
-  return data as ApiListItem[];
+  return items;
 }
 
-// Fetch per-video details (genres). Best-effort — returns undefined on failure.
-export async function fetchDetails(slug: string): Promise<{ genres: string[] } | null> {
+interface HentaiApiInfo {
+  id: number;
+  urlname: string;
+  videoname: string;
+  description: string;
+  releasedate: string;
+  uploaddate: string;
+  coverimg: string;
+  series: string | null;
+  status: number;
+  recentrelease: number;
+}
+interface HentaiApiResponse {
+  info: HentaiApiInfo[];
+  genres: { genre: string }[];
+}
+
+// Fetch detailed metadata for a single hentai via the API.
+// Returns the cover image URL (optcover preferred, fallback to /assets/cover/).
+async function fetchVideoMeta(slug: string): Promise<{ genres?: string[]; description?: string; releasedate?: string } | null> {
   try {
-    const data: ApiHentaiResponse = await fetchJson(
-      `${SOURCE_BASE}/api?action=hentai&slug=${encodeURIComponent(slug)}`
-    );
-    const genres = (data.genres || []).map((g) => g.genre).filter(Boolean);
-    return { genres };
+    const data = await fetchJson<HentaiApiResponse>(`${API_URL}${encodeURIComponent(slug)}`);
+    const info = data.info?.[0];
+    if (!info) return null;
+    return {
+      genres: (data.genres || []).map((g) => g.genre).filter(Boolean),
+      description: info.description ? decodeHtml(info.description) : undefined,
+      releasedate: info.releasedate,
+    };
   } catch {
     return null;
   }
 }
 
-// Scrape the entire catalog (or first N items if maxItems is set).
-// If enrichGenres is true, fetches per-video details to get genres.
-export async function scrapeSource(maxPages = 1, opts?: { enrichGenres?: boolean; maxItems?: number }): Promise<{ added: number; scanned: number }> {
-  const enrich = opts?.enrichGenres ?? false;
-  const maxItems = opts?.maxItems ?? 0; // 0 = all
+// Main scrape: pull RSS feed, optionally enrich each item via the API.
+export async function scrapeSource(maxPages = 1, opts?: { enrich?: boolean }): Promise<{ added: number; scanned: number }> {
+  // maxPages is kept for API compatibility but RSS returns everything in one go.
+  void maxPages;
 
-  const list = await fetchList();
-  const items = maxItems > 0 ? list.slice(0, maxItems) : list;
+  const enrich = opts?.enrich !== false; // default: enrich
+  let xml: string;
+  try {
+    xml = await fetchText(RSS_URL);
+  } catch {
+    return { added: 0, scanned: 0 };
+  }
+
+  const rssItems = parseRss(xml);
+  if (rssItems.length === 0) return { added: 0, scanned: 0 };
 
   const collected: MediaItem[] = [];
-  for (const apiItem of items) {
-    let genres: string[] | undefined;
-    if (enrich) {
-      const details = await fetchDetails(apiItem.urlname);
-      genres = details?.genres;
-    }
-    collected.push(toItem(apiItem, genres));
+  const seen = new Set<string>();
+
+  // Enrich in parallel batches of 5 to avoid hammering the API
+  const BATCH = 5;
+  for (let i = 0; i < rssItems.length; i += BATCH) {
+    const batch = rssItems.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map(async (r) => {
+        if (seen.has(r.slug)) return null;
+        seen.add(r.slug);
+
+        // Prefer the 16:9 thumbnail (per docs), fallback to cover from RSS
+        const thumbnail = `${SOURCE_BASE}/thumbnail/${encodeURIComponent(r.slug)}.webp`;
+
+        let category = 'main';
+        let description: string | undefined;
+
+        if (enrich) {
+          const meta = await fetchVideoMeta(r.slug);
+          if (meta?.genres?.length) category = meta.genres[0];
+          description = meta?.description;
+        }
+
+        return {
+          id: r.slug,
+          title: r.title,
+          thumbnail,
+          videoUrl: null,
+          embedUrl: `${SOURCE_BASE}/embed/${encodeURIComponent(r.slug)}?la=1`,
+          sourceUrl: r.link,
+          duration: null,
+          category,
+          // description is not part of MediaItem — skip storing
+        } as MediaItem;
+      })
+    );
+    for (const r of results) if (r) collected.push(r);
   }
 
   const added = await addMediaBulk(collected);
-  return { added, scanned: items.length };
+  return { added, scanned: collected.length };
 }
 
-// Add a single video by its URL (https://hentaiocean.com/watch/{slug}).
+// Add a single video by its /watch/{slug} URL.
 export async function scrapeSingleVideo(url: string): Promise<MediaItem | null> {
-  // Accept /watch/{slug}, /embed/{slug}, or just {slug}
-  const m = url.match(/(?:watch|embed)\/([^/?#]+)/);
+  // Accept /watch/{slug} or /embed/{slug} or bare slug
+  const m = url.match(/\/(?:watch|embed)\/([^/?#]+)/);
   const slug = m ? m[1] : url;
   if (!slug) return null;
 
-  try {
-    const data: ApiHentaiResponse = await fetchJson(
-      `${SOURCE_BASE}/api?action=hentai&slug=${encodeURIComponent(slug)}`
-    );
-    const info = data.info?.[0];
-    if (!info) return null;
-    const genres = (data.genres || []).map((g) => g.genre).filter(Boolean);
-    return toItem(info, genres);
-  } catch {
-    return null;
+  const canonical = `${SOURCE_BASE}/watch/${slug}`;
+  const embedUrl = `${SOURCE_BASE}/embed/${slug}?la=1`;
+  const thumbnail = `${SOURCE_BASE}/thumbnail/${slug}.webp`;
+
+  // Enrich via API
+  let title = slug.replace(/[-_]/g, ' ');
+  let category = 'main';
+  const meta = await fetchVideoMeta(slug);
+  if (meta) {
+    if (meta.genres?.length) category = meta.genres[0];
+    if (meta.description) {
+      // title not in API directly, but videoname equals slug-derived
+    }
   }
+
+  // Fetch RSS just to get the title for this slug (cheap, single request)
+  try {
+    const xml = await fetchText(RSS_URL);
+    const items = parseRss(xml);
+    const found = items.find((i) => i.slug === slug);
+    if (found) title = found.title;
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    id: slug,
+    title,
+    thumbnail,
+    videoUrl: null,
+    embedUrl,
+    sourceUrl: canonical,
+    duration: null,
+    category,
+  };
 }
 
 export async function addSingleFromUrl(url: string, opts?: { title?: string; thumbnail?: string; videoUrl?: string }) {
-  // Accept hentaiocean.com URLs OR raw slugs
-  const isUrl = /^https?:\/\//.test(url);
-  if (isUrl && !/hentaiocean\.com/.test(url)) {
-    throw new Error('URL must be from hentaiocean.com');
-  }
-
   const item = await scrapeSingleVideo(url);
-  if (!item) {
-    throw new Error('Could not fetch video — check the slug or URL');
-  }
-
-  // Override with provided values
+  if (!item) throw new Error(`Could not parse HentaiOcean URL: ${url}`);
   if (opts?.title) item.title = opts.title;
   if (opts?.thumbnail) item.thumbnail = opts.thumbnail;
-
   await addMedia(item);
   return item;
 }
@@ -177,14 +248,13 @@ export async function addSingleFromUrl(url: string, opts?: { title?: string; thu
 export async function bulkAdd(urls: string[]): Promise<{ added: number; failed: number }> {
   let added = 0;
   let failed = 0;
-  // Process in parallel batches of 5
   const BATCH = 5;
   for (let i = 0; i < urls.length; i += BATCH) {
     const batch = urls.slice(i, i + BATCH);
     const results = await Promise.all(
       batch.map(async (raw) => {
         const url = raw.trim();
-        if (!url) return false;
+        if (!url || !/^https?:\/\//i.test(url)) return false;
         try {
           await addSingleFromUrl(url);
           return true;

@@ -1,18 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Locale, LOCALES, LOCALE_NAMES, RTL_LOCALES, t } from '@/lib/i18n';
 import AgeGate from '@/components/AgeGate';
 import Header from '@/components/Header';
 import MediaCard, { type MediaItem } from '@/components/MediaCard';
 import VideoPlayer from '@/components/VideoPlayer';
-import AdminPanel from '@/components/AdminPanel';
 import About from '@/components/About';
 import Policy from '@/components/Policy';
-import { Ad, AdInserter } from '@/components/Ads';
+import { Ad, ResponsiveBanner, AdInserter } from '@/components/Ads';
 import { useVisitor } from '@/hooks/use-visitor';
 
-type Page = 'home' | 'about' | 'policy' | 'admin';
+type Page = 'home' | 'about' | 'policy';
 const AGE_KEY = 'twitchan_age_ok_v1';
 const LOCALE_KEY = 'twitchan_locale_v1';
 
@@ -124,9 +123,7 @@ export default function Home() {
     const m = u.searchParams.get('m');
     if (p === 'about') setPage('about');
     else if (p === 'policy') setPage('policy');
-    else if (p === 'admin') setPage('admin');
     if (m) {
-      // Try to load this media and open player
       fetch('/api/media?q=' + encodeURIComponent(m), { headers: apiHeaders() })
         .then((r) => r.json())
         .then((j) => {
@@ -169,9 +166,9 @@ export default function Home() {
         onChangeLocale={changeLocale}
       />
 
-      {/* Mobile top banner ad */}
-      <div className="sm:hidden">
-        <Ad zone="mobileBanner" className="my-0" />
+      {/* Top banner — responsive (468x60 PC / 300x100 mobile) */}
+      <div className="border-b border-neutral-200 bg-neutral-50 py-2 flex justify-center">
+        <ResponsiveBanner />
       </div>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4">
@@ -184,30 +181,37 @@ export default function Home() {
               {items.map((it, i) => (
                 <div key={it.id} className="contents">
                   <MediaCard item={it} locale={locale} onWatch={watch} />
-                  {((i + 1) % 15 === 0) && (
-                    <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5">
-                      <Ad zone="nativeResponsive" />
+                  {/* Insert native ad every 12 items */}
+                  {((i + 1) % 12 === 0) && (
+                    <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 flex justify-center py-2">
+                      <Ad zone="native" />
                     </div>
                   )}
                 </div>
               ))}
             </div>
 
-            <div className="flex items-center justify-center mt-8 mb-4 gap-3">
+            {/* Mid-page banner after every page of items */}
+            <div className="my-6 flex justify-center">
+              <ResponsiveBanner />
+            </div>
+
+            {/* Pagination — guaranteed visible, NOT sticky-footer */}
+            <div className="flex flex-wrap items-center justify-center gap-3 my-8 select-none">
               <button
                 onClick={() => fetchPage(Math.max(1, page_ - 1), false, search)}
                 disabled={page_ <= 1 || loading}
-                className="px-4 py-2 rounded-lg border border-neutral-300 text-sm disabled:opacity-40"
+                className="px-4 py-2.5 rounded-lg border border-neutral-300 text-sm disabled:opacity-40 hover:bg-neutral-50 transition"
               >
                 ← {t(locale, 'prev')}
               </button>
-              <span className="text-sm text-neutral-600">
+              <span className="text-sm text-neutral-600 px-2">
                 {t(locale, 'page')} {page_} {t(locale, 'of')} {totalPages || 1} · {total}
               </span>
               <button
                 onClick={loadMore}
                 disabled={page_ >= totalPages || loading}
-                className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-sm disabled:opacity-40"
+                className="px-5 py-2.5 rounded-lg bg-neutral-900 text-white text-sm disabled:opacity-40 hover:bg-neutral-800 transition font-medium"
               >
                 {loading ? t(locale, 'loading') : t(locale, 'next')} →
               </button>
@@ -217,11 +221,14 @@ export default function Home() {
 
         {page === 'about' && <About locale={locale} />}
         {page === 'policy' && <Policy locale={locale} />}
-        {page === 'admin' && <AdminPanel locale={locale} onChangeLocale={changeLocale} />}
       </main>
 
       <footer className="mt-auto border-t border-neutral-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 py-6 text-center">
+          {/* Bottom banner */}
+          <div className="mb-4 flex justify-center">
+            <ResponsiveBanner />
+          </div>
           <p className="text-xs text-neutral-500 mb-2">
             © {new Date().getFullYear()} twitchan.com · {t(locale, 'footerRights')}
           </p>

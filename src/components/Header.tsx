@@ -4,8 +4,8 @@ import { Locale, LOCALES, LOCALE_NAMES, RTL_LOCALES, t } from '@/lib/i18n';
 
 interface Props {
   locale: Locale;
-  page: 'home' | 'about' | 'policy' | 'admin';
-  onNav: (p: 'home' | 'about' | 'policy' | 'admin') => void;
+  page: 'home' | 'about' | 'policy';
+  onNav: (p: 'home' | 'about' | 'policy') => void;
   onSearch: (q: string) => void;
   search: string;
   onChangeLocale: (l: Locale) => void;
@@ -26,7 +26,7 @@ export default function Header({ locale, page, onNav, onSearch, search, onChange
         </button>
 
         <nav className="hidden sm:flex items-center gap-1 text-sm">
-          {(['home', 'about', 'policy', 'admin'] as const).map((p) => (
+          {(['home', 'about', 'policy'] as const).map((p) => (
             <button
               key={p}
               onClick={() => onNav(p)}
@@ -61,7 +61,7 @@ export default function Header({ locale, page, onNav, onSearch, search, onChange
 
       {/* Mobile nav */}
       <nav className="sm:hidden flex items-center gap-1 px-2 pb-2 text-xs">
-        {(['home', 'about', 'policy', 'admin'] as const).map((p) => (
+        {(['home', 'about', 'policy'] as const).map((p) => (
           <button
             key={p}
             onClick={() => onNav(p)}

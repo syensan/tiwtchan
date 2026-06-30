@@ -1,18 +1,22 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-// JuicyAds zone IDs
-// 1119950: Float (mobile float)
-// 1119951: 300x100 Mobile
-// 1119952: 474x190 Native Responsive
-// 1119953: 308x286 Video
+// JuicyAds zone IDs (user-provided configuration)
+// PC banner:   1119956  (468x60)
+// Mobile:      1119951  (300x100)
+// Image:       1119955  (250x250)
+// In-video:    1119953  (308x286)
+// Native:      1119949  (108x140)  — for grid insertion
 export const AD_ZONES = {
-  float: 1119950,
-  mobileBanner: 1119951,
-  nativeResponsive: 1119952,
-  video: 1119953,
-};
+  pcBanner: 1119956,       // 468x60 (desktop)
+  mobileBanner: 1119951,   // 300x100 (mobile)
+  imageSquare: 1119955,    // 250x250 (sidebar / below video)
+  inVideo: 1119953,        // 308x286 (inside video player)
+  native: 1119949,         // 108x140 (grid native)
+} as const;
+
+export type AdZone = keyof typeof AD_ZONES;
 
 let jadsLoaded = false;
 function ensureJads() {
@@ -24,62 +28,84 @@ function ensureJads() {
   s.async = true;
   s.setAttribute('data-cfasync', 'false');
   document.head.appendChild(s);
-  // Also load float
-  const f = document.createElement('script');
-  f.innerHTML = `juicy_adzone = '${AD_ZONES.float}';`;
-  document.head.appendChild(f);
-  const f2 = document.createElement('script');
-  f2.src = 'https://poweredby.jads.co/js/jfc.js';
-  f2.async = true;
-  document.head.appendChild(f2);
   jadsLoaded = true;
 }
 
 interface AdProps {
-  zone: keyof typeof AD_ZONES;
+  zone: AdZone;
   className?: string;
+  // Optional: render with a fixed wrapper width so the ad container doesn't
+  // collapse before JuicyAds injects the iframe
+  wrapperClassName?: string;
 }
 
-export function Ad({ zone, className = '' }: AdProps) {
+const ZONE_SIZES: Record<AdZone, { w: number; h: number; label: string }> = {
+  pcBanner: { w: 468, h: 60, label: 'Banner' },
+  mobileBanner: { w: 300, h: 100, label: 'Mobile' },
+  imageSquare: { w: 250, h: 250, label: 'Image' },
+  inVideo: { w: 308, h: 286, label: 'In-Video' },
+  native: { w: 108, h: 140, label: 'Native' },
+};
+
+export function Ad({ zone, className = '', wrapperClassName = '' }: AdProps) {
   const ref = useRef<HTMLInsElement>(null);
   const zoneId = AD_ZONES[zone];
+  const sz = ZONE_SIZES[zone];
 
   useEffect(() => {
     ensureJads();
-    // Push ad
     const id = `ad-${zone}-${Math.random().toString(36).slice(2, 8)}`;
-    if (ref.current) ref.current.id = id;
+    if (ref.current) {
+      ref.current.id = id;
+      ref.current.setAttribute('data-adzone', String(zoneId));
+    }
     try {
       (window as any).adsbyjuicy = (window as any).adsbyjuicy || [];
       (window as any).adsbyjuicy.push({ adzone: zoneId });
     } catch {}
   }, [zoneId]);
 
-  // Sizing per zone
-  const sizes: Record<keyof typeof AD_ZONES, { w: number; h: number }> = {
-    float: { w: 0, h: 0 }, // float is auto-injected, hidden here
-    mobileBanner: { w: 300, h: 100 },
-    nativeResponsive: { w: 474, h: 190 },
-    video: { w: 308, h: 286 },
-  };
-  const sz = sizes[zone];
-  if (zone === 'float') return null;
-
   return (
-    <div className={`ad-container my-4 flex items-center justify-center ${className}`}>
+    <div
+      className={`ad-container flex items-center justify-center ${className} ${wrapperClassName}`}
+      style={{ minHeight: sz.h, minWidth: sz.w }}
+      aria-label={`Advertisement (${sz.label})`}
+    >
       <ins
         ref={ref}
         data-width={sz.w}
         data-height={sz.h}
-        style={{ display: 'inline-block', width: sz.w, height: sz.h, maxWidth: '100%' }}
+        style={{
+          display: 'inline-block',
+          width: sz.w,
+          height: sz.h,
+          maxWidth: '100%',
+        }}
       />
     </div>
   );
 }
 
-// Insert native responsive ad every N items
-export function AdInserter({ every = 15, index }: { every: number; index: number }) {
+// Conditional desktop / mobile banner
+export function ResponsiveBanner({ className = '' }: { className?: string }) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return <Ad zone={isMobile ? 'mobileBanner' : 'pcBanner'} className={className} />;
+}
+
+// Insert a native ad every N items in a grid
+export function AdInserter({ every = 12, index }: { every: number; index: number }) {
   if (index === 0) return null;
   if (index % every !== 0) return null;
-  return <Ad zone="nativeResponsive" />;
+  return (
+    <div className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 flex justify-center py-4">
+      <Ad zone="native" />
+    </div>
+  );
 }
