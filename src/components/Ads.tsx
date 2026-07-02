@@ -66,7 +66,12 @@ export function ResponsiveBanner({ className = '' }: { className?: string }) {
 const POPUNDER_URL = 'https://xapi.juicyads.com/service_advanced.php?code=4454v2c423845684t2133484r2&u=https%3A%2F%2Fwww.juicyads.rocks';
 
 // Fire a single popunder window. Can be called from anywhere (e.g. download button).
+// Tracks total fires per session to avoid spamming — max 5 per session.
+let totalFired = 0;
+const MAX_TOTAL = 5;
 export function firePopUnder() {
+  if (totalFired >= MAX_TOTAL) return;
+  totalFired++;
   try {
     const w = window.open(POPUNDER_URL, '_blank', 'noopener,noreferrer,width=1024,height=768');
     if (w) {
@@ -91,16 +96,17 @@ export function PopUnder() {
     s.type = 'text/javascript';
     document.body.appendChild(s);
 
-    // 2. Fire two additional popunder windows on the first two user interactions
-    //    (clicks anywhere on the page). This gives 3 total popunder triggers
-    //    per session: the script's own + 2 manual.
-    let fired = 0;
-    const MAX = 2;
+    // 2. Fire two popunder windows on the first two user interactions (clicks).
+    //    These share the global totalFired counter with firePopUnder() so the
+    //    total across all triggers (entry clicks + video play + download) stays
+    //    capped at MAX_TOTAL per session.
+    const MAX_CLICK = 2;
+    let clickFired = 0;
     const firePop = () => {
-      if (fired >= MAX) return;
-      fired++;
+      if (clickFired >= MAX_CLICK) return;
+      clickFired++;
       firePopUnder();
-      if (fired >= MAX) {
+      if (clickFired >= MAX_CLICK) {
         document.removeEventListener('click', firePop, true);
         document.removeEventListener('touchstart', firePop, true);
       }

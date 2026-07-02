@@ -125,6 +125,12 @@ export async function scrapeSource(maxPages = 30): Promise<{ added: number; scan
   return { added, scanned };
 }
 
+// In-memory cache of resolved MP4 URLs (TTL 5 minutes).
+// Keyed by `${videoId}:${quality}`. In Netlify Functions, warm instances
+// reuse this cache across requests — saving a fetch per play.
+const mp4Cache = new Map<string, { url: string; ts: number }>();
+const MP4_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Resolve the direct MP4 URL just-in-time by fetching the full video page.
 // The hash in the URL is IP-bound — it only works from the same IP that
 // fetched the page. This function must be called from the server that will
@@ -133,6 +139,11 @@ export async function scrapeSource(maxPages = 30): Promise<{ added: number; scan
 // We use the `download=true` variant (not `embed=true`) because it's more
 // reliable across different videos.
 export async function resolveMp4Url(sourceUrl: string, quality?: '480p' | '720p' | '1080p'): Promise<string | null> {
+  const cacheKey = `${sourceUrl}:${quality || 'auto'}`;
+  const cached = mp4Cache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < MP4_CACHE_TTL) {
+    return cached.url;
+  }
   try {
     const r = await fetch(sourceUrl, {
       headers: HEADERS,
@@ -151,9 +162,15 @@ export async function resolveMp4Url(sourceUrl: string, quality?: '480p' | '720p'
       else if (u.includes('_720p.')) byQuality['720p'] = u;
       else byQuality['480p'] = u;
     }
-    if (quality && byQuality[quality]) return byQuality[quality];
+    if (quality && byQuality[quality]) {
+      const url = byQuality[quality];
+      mp4Cache.set(cacheKey, { url, ts: Date.now() });
+      return url;
+    }
     // Default: prefer 720p, then 480p, then 1080p
-    return byQuality['720p'] || byQuality['480p'] || byQuality['1080p'] || dlUrls[0];
+    const url = byQuality['720p'] || byQuality['480p'] || byQuality['1080p'] || dlUrls[0];
+    mp4Cache.set(cacheKey, { url, ts: Date.now() });
+    return url;
   } catch {
     return null;
   }

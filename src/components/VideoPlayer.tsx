@@ -13,6 +13,9 @@ interface Props {
 
 export default function VideoPlayer({ item, locale, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     if (!item) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -24,6 +27,37 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     };
   }, [onClose, item]);
 
+  // Fetch the direct MP4 URL via /api/download (returns 302 redirect).
+  // The browser follows the redirect and we capture the final URL to use as <video src>.
+  // This avoids streaming through our server (saves Compute) — the visitor's
+  // browser fetches the MP4 directly from 85xo.com.
+  useEffect(() => {
+    if (!item) return;
+    let cancelled = false;
+    // Use fetch with redirect:'follow' to get the final URL
+    fetch(`/api/download?id=${encodeURIComponent(item.id)}`, { redirect: 'follow' })
+      .then((r) => {
+        if (cancelled) return;
+        if (!r.ok && r.status !== 0) throw new Error(`HTTP ${r.status}`);
+        // The final URL after redirect is the direct MP4 URL
+        const finalUrl = r.url || '';
+        if (finalUrl && finalUrl.startsWith('http')) {
+          setVideoSrc(finalUrl);
+        } else {
+          throw new Error('no redirect URL');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Fallback: use the proxy URL directly (browser will follow redirect)
+        setVideoSrc(`/api/download?id=${encodeURIComponent(item.id)}`);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [item]);
+
   if (!item) return null;
 
   const handleDownload = () => {
@@ -32,7 +66,7 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: item.id }),
     }).catch(() => {});
-    // Always use the proxy — it resolves the MP4 just-in-time and forces download
+    // Open the download URL — browser follows 302 redirect to MP4 with attachment
     window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
     // Fire a popunder after the download click
     firePopUnder();
@@ -53,7 +87,7 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
         className="bg-white rounded-xl max-w-4xl w-full my-4 sm:my-8 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header — NOT sticky so it scrolls away naturally */}
+        {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-neutral-200">
           <h2 className="text-sm font-semibold text-neutral-900 truncate pr-3">{item.title}</h2>
           <button
@@ -67,23 +101,32 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
           </button>
         </div>
 
-        {/* 16:9 video area — always use native <video> via /api/download proxy.
-            The proxy resolves the MP4 URL just-in-time (IP-bound hash) and
-            streams it with Range support. No source-site ads loaded. */}
+        {/* 16:9 video area */}
         <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9', maxHeight: '70vh' }}>
-          <video
-            src={`/api/download?id=${encodeURIComponent(item.id)}`}
-            className="w-full h-full"
-            style={{ display: 'block', maxHeight: '70vh' }}
-            controls
-            autoPlay
-            playsInline
-            preload="metadata"
-            controlsList="nodownload"
-          />
+          {loading ? (
+            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
+              <div className="animate-pulse">Loading video…</div>
+            </div>
+          ) : videoSrc ? (
+            <video
+              src={videoSrc}
+              className="w-full h-full"
+              style={{ display: 'block', maxHeight: '70vh' }}
+              controls
+              autoPlay
+              playsInline
+              preload="metadata"
+              controlsList="nodownload"
+              referrerPolicy="no-referrer"
+            />
+          ) : !videoSrc ? (
+            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
+              {t(locale, 'empty')}
+            </div>
+          ) : null}
         </div>
 
-        {/* Info + ads — in normal document flow, scrollable via the outer container */}
+        {/* Info + ads */}
         <div className="p-4">
           <div className="flex flex-wrap gap-2 mb-3">
             <button
@@ -107,12 +150,12 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
             {item.duration ? ` · ${item.duration}` : ''}
           </p>
 
-          {/* In-video ad (308x286) — high CPM placement right under the player */}
+          {/* In-video ad */}
           <div className="mt-4 border-t border-neutral-200 pt-4 flex justify-center">
             <Ad zone="inVideo" />
           </div>
 
-          {/* Below-video image ad (250x250) */}
+          {/* Below-video image ad */}
           <div className="mt-4 flex justify-center">
             <Ad zone="imageSquare" />
           </div>
