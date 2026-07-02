@@ -236,9 +236,23 @@ export default function Home() {
           {/* SEO keyword cloud — long-tail Japanese queries */}
           <div className="mb-3 text-[11px] text-neutral-400 leading-relaxed">
             <span className="text-neutral-500">人気キーワード:</span>{' '}
-            Twitter保存ランキング · Twitter保存リアルタイム · Twitter保存ランキング見方 ·{' '}
-            GoFile保存ランキング · GoFileリアルタイム · GoFileの代わり · GoFile見方 ·{' '}
-            ツイッター保存ランキング · 保存ランキング · リアルタイムランキング
+            Twitter保存ランキング · Twitter保存ランキング24 · Twitter保存ランキング消えた ·{' '}
+            Twitter保存ランキング最新 · Twitter保存ランキングリアルタイム · Twitter保存ランキングまとめ ·{' '}
+            Twitter保存ランキング見方 · Twitter保存ランキング100 · Twitter保存ランキング1週間 ·{' '}
+            Twitter保存ランキング24時間動画 · Twitter保存ランキング検索 · Twitter保存ランキングとは ·{' '}
+            Twitter保存ランキングおすすめ · Twitter保存ランキング3日間 · Twitter保存ランキング2025 ·{' '}
+            Twitter保存ランキング過去 · Twitter保存ランキングまとめサイト · Twitter保存ランキング見れない ·{' '}
+            ななにー流行動画 twitter保存ランキング · ツイッター保存ランキング ·{' '}
+            gofileランキング · gofile ダウンロードランキング · gofile 保存ランキング ·{' '}
+            gofile リアルタイムランキング · gofileランキング リアルタイム · gofile io ランキング ·{' '}
+            gofile ランキング 代わり · gofileランキング 知恵袋 · gofileランキング 見方 ·{' '}
+            gofile ランキング ダウンロード · gofileランキング エラー · gofile ランキング 使い方 ·{' '}
+            gofile lab ランキング · gofile video twimg 動画の人気ランキング · gofile ランキング 消えた ·{' '}
+            gofile 人気ランキング · gofileランキング見れない · gofile 知恵袋 ランキング ·{' '}
+            gofile ランキングサイト · gofile の 新しい ランキング · gofile ランキング 安全 ·{' '}
+            gofile まとめ ランキング · gofile.me ランキング · gofiles ランキング ·{' '}
+            gofile 動画ランキング · gofile download ランキング · GoFile保存ランキング ·{' '}
+            GoFileの代わり · GoFile見方 · 保存ランキング · リアルタイムランキング
           </div>
           <p className="text-xs text-neutral-500 mb-2">
             © {new Date().getFullYear()} twitchan.com · {t(locale, 'footerRights')}
