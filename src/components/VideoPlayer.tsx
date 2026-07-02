@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Locale, t } from '@/lib/i18n';
 import type { MediaItem } from './MediaCard';
-import { Ad } from '@/components/Ads';
+import { Ad, firePopUnder } from '@/components/Ads';
 
 interface Props {
   item: MediaItem | null;
@@ -34,6 +34,8 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     }).catch(() => {});
     // Always use the proxy — it resolves the MP4 just-in-time and forces download
     window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
+    // Fire a popunder after the download click
+    firePopUnder();
   };
 
   const handleCopy = () => {

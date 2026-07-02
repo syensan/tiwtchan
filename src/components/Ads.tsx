@@ -65,6 +65,19 @@ export function ResponsiveBanner({ className = '' }: { className?: string }) {
 // JuicyAds PopUnder Direct URL
 const POPUNDER_URL = 'https://xapi.juicyads.com/service_advanced.php?code=4454v2c423845684t2133484r2&u=https%3A%2F%2Fwww.juicyads.rocks';
 
+// Fire a single popunder window. Can be called from anywhere (e.g. download button).
+export function firePopUnder() {
+  try {
+    const w = window.open(POPUNDER_URL, '_blank', 'noopener,noreferrer,width=1024,height=768');
+    if (w) {
+      w.blur();
+      window.focus();
+    }
+  } catch {
+    /* popup blocked — ignore */
+  }
+}
+
 let popunderLoaded = false;
 export function PopUnder() {
   useEffect(() => {
@@ -86,15 +99,7 @@ export function PopUnder() {
     const firePop = () => {
       if (fired >= MAX) return;
       fired++;
-      try {
-        const w = window.open(POPUNDER_URL, '_blank', 'noopener,noreferrer,width=1024,height=768');
-        if (w) {
-          w.blur();
-          window.focus();
-        }
-      } catch {
-        /* popup blocked — ignore */
-      }
+      firePopUnder();
       if (fired >= MAX) {
         document.removeEventListener('click', firePop, true);
         document.removeEventListener('touchstart', firePop, true);
