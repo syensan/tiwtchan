@@ -82,29 +82,31 @@ function parseListingCards(html: string): ListingCard[] {
   return cards;
 }
 
-// Scrape multiple listing pages. 85xo.com uses /latest/{N}/ for pagination.
-export async function scrapeSource(maxPages = 5): Promise<{ added: number; scanned: number }> {
+// Scrape multiple listing pages. 85xo.com uses ?from={N} pagination (30 per page).
+// Page 1 = homepage, page 2 = ?from=30, page 3 = ?from=60, etc.
+export async function scrapeSource(maxPages = 30): Promise<{ added: number; scanned: number }> {
   let scanned = 0;
   const collected: MediaItem[] = [];
   const seen = new Set<string>();
 
   for (let page = 1; page <= maxPages; page++) {
-    const candidates = page === 1
-      ? [`${SOURCE_BASE}/`, `${SOURCE_BASE}/latest/`]
-      : [`${SOURCE_BASE}/latest/${page}/`];
+    const from = (page - 1) * 30;
+    const url = from === 0 ? `${SOURCE_BASE}/` : `${SOURCE_BASE}/?from=${from}`;
     let cards: ListingCard[] = [];
-    for (const url of candidates) {
-      try {
-        const html = await fetchPage(url);
-        cards = parseListingCards(html);
-        if (cards.length > 0) break;
-      } catch { continue; }
+    try {
+      const html = await fetchPage(url);
+      cards = parseListingCards(html);
+    } catch { continue; }
+    if (cards.length === 0) {
+      // No more pages
+      break;
     }
-    if (cards.length === 0) continue;
+    let newOnThisPage = 0;
     for (const c of cards) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       scanned++;
+      newOnThisPage++;
       collected.push({
         id: c.id,
         title: c.title,
@@ -116,6 +118,8 @@ export async function scrapeSource(maxPages = 5): Promise<{ added: number; scann
         category: c.quality || 'main',
       });
     }
+    // If all cards on this page were already seen, we've reached the end
+    if (newOnThisPage === 0) break;
   }
   const added = await addMediaBulk(collected);
   return { added, scanned };
