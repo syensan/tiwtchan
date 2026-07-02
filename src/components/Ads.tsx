@@ -62,13 +62,15 @@ export function ResponsiveBanner({ className = '' }: { className?: string }) {
   return <Ad zone={device === 'mobile' ? 'mobileBanner' : 'pcBanner'} className={className} />;
 }
 
-// JuicyAds PopUnder Direct URL
+// JuicyAds PopUnder Direct URL (for manual triggering from download/play buttons)
 const POPUNDER_URL = 'https://xapi.juicyads.com/service_advanced.php?code=4454v2c423845684t2133484r2&u=https%3A%2F%2Fwww.juicyads.rocks';
 
 // Fire a single popunder window. Can be called from anywhere (e.g. download button).
-// Tracks total fires per session to avoid spamming — max 5 per session.
+// Note: The official Standard PopUnder v3 and Friendly v3.2 scripts are loaded
+// in layout.tsx <body> and handle automatic triggering. This function is for
+// additional manual triggers from specific user actions (video play, download).
 let totalFired = 0;
-const MAX_TOTAL = 5;
+const MAX_TOTAL = 3;
 export function firePopUnder() {
   if (totalFired >= MAX_TOTAL) return;
   totalFired++;
@@ -83,41 +85,19 @@ export function firePopUnder() {
   }
 }
 
+// PopUnder component — loads the JuicyAds advanced service script.
+// The official Standard v3 and Friendly v3.2 scripts are in layout.tsx.
+// This component loads the advanced service script for additional coverage.
 let popunderLoaded = false;
 export function PopUnder() {
   useEffect(() => {
     if (popunderLoaded) return;
     popunderLoaded = true;
-
-    // 1. Load the JuicyAds advanced service script (handles popunder logic)
     const s = document.createElement('script');
     s.src = POPUNDER_URL;
     s.async = true;
     s.type = 'text/javascript';
     document.body.appendChild(s);
-
-    // 2. Fire two popunder windows on the first two user interactions (clicks).
-    //    These share the global totalFired counter with firePopUnder() so the
-    //    total across all triggers (entry clicks + video play + download) stays
-    //    capped at MAX_TOTAL per session.
-    const MAX_CLICK = 2;
-    let clickFired = 0;
-    const firePop = () => {
-      if (clickFired >= MAX_CLICK) return;
-      clickFired++;
-      firePopUnder();
-      if (clickFired >= MAX_CLICK) {
-        document.removeEventListener('click', firePop, true);
-        document.removeEventListener('touchstart', firePop, true);
-      }
-    };
-    document.addEventListener('click', firePop, true);
-    document.addEventListener('touchstart', firePop, true);
-
-    return () => {
-      document.removeEventListener('click', firePop, true);
-      document.removeEventListener('touchstart', firePop, true);
-    };
   }, []);
   return null;
 }
