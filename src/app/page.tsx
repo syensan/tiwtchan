@@ -8,7 +8,7 @@ import MediaCard, { type MediaItem } from '@/components/MediaCard';
 import VideoPlayer from '@/components/VideoPlayer';
 import About from '@/components/About';
 import Policy from '@/components/Policy';
-import { Ad, ResponsiveBanner, AdInserter } from '@/components/Ads';
+import { Ad, ResponsiveBanner } from '@/components/Ads';
 import { useVisitor } from '@/hooks/use-visitor';
 
 type Page = 'home' | 'about' | 'policy';

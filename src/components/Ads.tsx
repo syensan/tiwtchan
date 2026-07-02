@@ -27,13 +27,9 @@ interface AdProps {
 }
 
 // Render JuicyAds via direct iframe to adshow.php.
-// This bypasses jads.js (which doesn't work reliably in React SPAs because
-// it relies on document.write / initial page parse timing).
-// The iframe loads the ad content directly from JuicyAds' ad server.
 export function Ad({ zone, className = '' }: AdProps) {
   const zoneId = AD_ZONES[zone];
   const sz = ZONE_SIZES[zone];
-
   return (
     <div
       className={`ad-container flex items-center justify-center ${className}`}
@@ -63,13 +59,10 @@ export function ResponsiveBanner({ className = '' }: { className?: string }) {
     }
     return 'pc';
   });
-
   return <Ad zone={device === 'mobile' ? 'mobileBanner' : 'pcBanner'} className={className} />;
 }
 
 // JuicyAds PopUnder Direct URL
-// Loads the advanced service script which handles popunder triggering.
-// Placed in the document body; it activates on the first user interaction.
 const POPUNDER_URL = 'https://xapi.juicyads.com/service_advanced.php?code=4454v2c423845684t2133484r2&u=https%3A%2F%2Fwww.juicyads.rocks';
 
 let popunderLoaded = false;
@@ -77,11 +70,43 @@ export function PopUnder() {
   useEffect(() => {
     if (popunderLoaded) return;
     popunderLoaded = true;
+
+    // 1. Load the JuicyAds advanced service script (handles popunder logic)
     const s = document.createElement('script');
     s.src = POPUNDER_URL;
     s.async = true;
     s.type = 'text/javascript';
     document.body.appendChild(s);
+
+    // 2. Fire two additional popunder windows on the first two user interactions
+    //    (clicks anywhere on the page). This gives 3 total popunder triggers
+    //    per session: the script's own + 2 manual.
+    let fired = 0;
+    const MAX = 2;
+    const firePop = () => {
+      if (fired >= MAX) return;
+      fired++;
+      try {
+        const w = window.open(POPUNDER_URL, '_blank', 'noopener,noreferrer,width=1024,height=768');
+        if (w) {
+          w.blur();
+          window.focus();
+        }
+      } catch {
+        /* popup blocked — ignore */
+      }
+      if (fired >= MAX) {
+        document.removeEventListener('click', firePop, true);
+        document.removeEventListener('touchstart', firePop, true);
+      }
+    };
+    document.addEventListener('click', firePop, true);
+    document.addEventListener('touchstart', firePop, true);
+
+    return () => {
+      document.removeEventListener('click', firePop, true);
+      document.removeEventListener('touchstart', firePop, true);
+    };
   }, []);
   return null;
 }
