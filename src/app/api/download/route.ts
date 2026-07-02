@@ -1,58 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById } from '@/lib/media-store';
+import { resolveMp4Url } from '@/lib/scraper';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Stream a direct MP4 file from the upstream provider.
-// Forwards Range headers so the in-site <video> player can seek.
-// Sets proper Referer so the upstream accepts the request.
-// Adds Content-Disposition: attachment when ?download=1 is set.
+// Just-in-time MP4 proxy:
+// 1. Look up the video by ID (from our JSON seed / Netlify Blobs)
+// 2. Fetch the embed page from 85xo.com to get the current IP-bound MP4 URL
+// 3. Stream the MP4 to the visitor with Range header support
 //
-// IMPORTANT: This proxy exists so we can play the video in a native <video>
-// tag WITHOUT loading the source site's ad scripts (ExoClick, JuicyAds, etc.
-// from hentaiocean.com's embed page). Only our own JuicyAds zones are loaded.
+// This bypasses Cloudflare (85xo.com is a mirror that doesn't block server-side)
+// and avoids loading the source site's ad scripts (ExoClick, etc.) — only our
+// own JuicyAds zones are loaded on the page.
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const id = url.searchParams.get('id');
   const download = url.searchParams.get('download') === '1';
+  const quality = (url.searchParams.get('q') as '480p' | '720p' | '1080p') || undefined;
   if (!id) return NextResponse.json({ error: 'no id' }, { status: 400 });
+
   const m = await getMediaById(id);
   if (!m) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
-  const target = m.videoUrl;
-  if (!target) {
-    // No direct MP4 — redirect to source page as fallback
-    if (m.sourceUrl) return NextResponse.redirect(m.sourceUrl, { status: 302 });
-    return NextResponse.json({ error: 'no source' }, { status: 400 });
+  // Resolve the MP4 URL just-in-time by fetching the full video page
+  // (IP-bound hash, must be fetched from this server)
+  if (!m.sourceUrl) {
+    return NextResponse.json({ error: 'no source url' }, { status: 400 });
+  }
+  let mp4Url = await resolveMp4Url(m.sourceUrl, quality);
+  if (!mp4Url) {
+    // Fallback: redirect to source page
+    return NextResponse.redirect(m.sourceUrl, { status: 302 });
   }
 
+  // Build forward headers
   const fwd: Record<string, string> = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept': '*/*',
-    'Referer': 'https://w2.hentaiocean.com/',
-    'Origin': 'https://w2.hentaiocean.com',
+    'Referer': 'https://www.85xo.com/',
   };
   const range = req.headers.get('range');
   if (range) fwd['Range'] = range;
 
   let upstream: Response;
   try {
-    upstream = await fetch(target, {
+    upstream = await fetch(mp4Url, {
       headers: fwd,
       redirect: 'follow',
       signal: AbortSignal.timeout(30000),
     });
   } catch {
-    return NextResponse.redirect(target, { status: 302 });
+    return NextResponse.redirect(mp4Url, { status: 302 });
   }
 
   if (!upstream.ok || !upstream.body) {
-    return NextResponse.redirect(target, { status: 302 });
+    return NextResponse.redirect(mp4Url, { status: 302 });
   }
 
   const outHeaders: Record<string, string> = {
-    'Cache-Control': 'public, max-age=3600',
+    'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
   };
   for (const h of ['content-length', 'content-range', 'accept-ranges', 'content-type']) {

@@ -1,34 +1,22 @@
-// HentaiOcean API-based scraper.
-// Uses the official RSS feed + per-video API + embed page (for direct MP4 URLs).
-//
-// Documentation: https://hentaiocean.com/api-docs
-//
-// Strategy:
-//   1. Pull RSS feed for the video list (slug + title + cover thumbnail)
-//   2. For each video, fetch the /embed/{slug} page and parse the `jsondata`
-//      script block, which contains a `mirrors` array with mirror URLs like
-//      https://w2.hentaiocean.com/play?vid={filename}
-//   3. From the play page, extract the BASE_VIDEO_URL pattern and construct
-//      the direct MP4 URL: https://w2.hentaiocean.com/video/{encoded_filename}
-//   4. Store the direct MP4 URL so the frontend can use a native <video>
-//      player WITHOUT loading the source site's ads (ExoClick, JuicyAds, etc.)
+// Scraper for 85xo.com (mirror of 85po.com, accessible without Cloudflare block).
+// Fetches listing pages for video metadata. Does NOT resolve MP4 URLs at scrape
+// time — those are IP-bound and would expire. Instead, the /api/download proxy
+// fetches the embed page just-in-time at play time and streams the MP4.
 //
 // Storage: JSON seed file + Netlify Blobs (see ./media-store)
 
 import { addMedia, addMediaBulk, type MediaItem } from './media-store';
 
-const SOURCE_BASE = 'https://hentaiocean.com';
-const W2_BASE = 'https://w2.hentaiocean.com';
-const RSS_URL = `${SOURCE_BASE}/rss.xml`;
-const API_URL = `${SOURCE_BASE}/api?action=hentai&slug=`;
+const SOURCE_BASE = 'https://www.85xo.com';
 
-interface RssItem {
+interface ListingCard {
+  id: string;
   slug: string;
+  sourceUrl: string;
   title: string;
-  link: string;
-  embedUrl: string;
-  thumbnail: string;
-  pubDate?: string;
+  thumbnail?: string;
+  duration?: string;
+  quality?: string;
 }
 
 function decodeHtml(s: string): string {
@@ -43,262 +31,164 @@ function decodeHtml(s: string): string {
 }
 
 const HEADERS = {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'application/rss+xml, application/xml, text/xml, application/json, text/html, */*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8,zh-CN;q=0.7',
 };
 
-async function fetchText(url: string): Promise<string> {
-  const r = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(15000),
-    redirect: 'follow',
-  });
+async function fetchPage(url: string): Promise<string> {
+  const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(15000), redirect: 'follow' });
   if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
   return await r.text();
 }
 
-async function fetchJson<T = any>(url: string): Promise<T> {
-  const r = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(15000),
-    redirect: 'follow',
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
-  return await r.json() as T;
-}
-
-// Parse the RSS XML feed.
-function parseRss(xml: string): RssItem[] {
-  const items: RssItem[] = [];
+// Parse listing pages. Each card:
+//   <a href="https://www.85xo.com/v/{id}/{slug}/" title="...">
+//     <img data-original="https://www.85xo.com/contents/videos_screenshots/.../1.jpg" />
+//     <div class="qualtiy 2k">2K</div>
+//     <div class="time">... 0:59</div>
+//   </a>
+function parseListingCards(html: string): ListingCard[] {
+  const cards: ListingCard[] = [];
   const seen = new Set<string>();
-  const itemRe = /<item>([\s\S]*?)<\/item>/gi;
+  const cardRe = /<a\s+href="(https:\/\/www\.85xo\.com\/v\/(\d+)\/([^/]+)\/)"\s+title="([^"]*)"([\s\S]*?)<\/a>/gi;
   let m: RegExpExecArray | null;
-  while ((m = itemRe.exec(xml)) !== null) {
-    const block = m[1];
-    const slug = block.match(/<guid>([^<]+)<\/guid>/i)?.[1]?.trim();
-    if (!slug || seen.has(slug)) continue;
-    seen.add(slug);
-    items.push({
-      slug,
-      title: decodeHtml(block.match(/<title>([^<]+)<\/title>/i)?.[1] || slug),
-      link: block.match(/<link>([^<]+)<\/link>/i)?.[1]?.trim() || `${SOURCE_BASE}/watch/${slug}`,
-      embedUrl: block.match(/<embedUrl>([^<]+)<\/embedUrl>/i)?.[1]?.trim() || `${SOURCE_BASE}/embed/${slug}`,
-      thumbnail: block.match(/<media:thumbnail[^>]+url="([^"]+)"/i)?.[1] || '',
-      pubDate: block.match(/<pubDate>([^<]+)<\/pubDate>/i)?.[1]?.trim(),
-    });
-  }
-  return items;
-}
-
-// Fetch the /embed/{slug} page and extract the jsondata block.
-// Returns the first mirror's play URL (e.g. https://w2.hentaiocean.com/play?vid=...)
-async function fetchEmbedMirrorUrl(slug: string): Promise<string | null> {
-  try {
-    const html = await fetchText(`${SOURCE_BASE}/embed/${encodeURIComponent(slug)}?la=1`);
-    // The jsondata script block contains a JSON object with a `mirrors` array
-    const m = html.match(/var\s+jsondata\s*=\s*(\{[\s\S]*?\})\s*<\/script>/);
-    if (!m) return null;
-    let j: any;
-    try {
-      j = JSON.parse(m[1]);
-    } catch {
-      return null;
+  while ((m = cardRe.exec(html)) !== null) {
+    const sourceUrl = m[1];
+    const id = m[2];
+    const slug = m[3];
+    const titleAttr = decodeHtml(m[4] || '');
+    const inner = m[5] || '';
+    if (seen.has(id)) continue;
+    seen.add(id);
+    let title = titleAttr;
+    if (!title) {
+      const titleDiv = inner.match(/<div class="title"[^>]*>([\s\S]*?)<\/div>/i);
+      title = titleDiv ? titleDiv[1].trim() : slug.replace(/[-_]/g, ' ');
     }
-    const mirrors: any[] = j?.mirrors || [];
-    if (mirrors.length === 0) return null;
-    // Prefer VIP mirror (w2.hentaiocean.com), fallback to first
-    const vip = mirrors.find((x) => x.mirrorurl && /w2\.hentaiocean\.com\/play\?/.test(x.mirrorurl));
-    return (vip || mirrors[0]).mirrorurl || null;
-  } catch {
-    return null;
+    const thumb =
+      inner.match(/data-webp="([^"]+)"/i)?.[1] ||
+      inner.match(/data-original="([^"]+)"/i)?.[1];
+    const durMatch = inner.match(/<div class="time"[^>]*>([\s\S]*?)<\/div>/i);
+    let duration: string | undefined;
+    if (durMatch) {
+      const txt = durMatch[1].replace(/<[^>]+>/g, '').trim();
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(txt)) duration = txt;
+    }
+    const qMatch = inner.match(/<div class="qualtiy[^"]*"[^>]*>([^<]+)<\/div>/i);
+    const quality = qMatch ? qMatch[1].trim() : undefined;
+    cards.push({ id, slug, sourceUrl, title: title || slug.replace(/[-_]/g, ' '), thumbnail: thumb, duration, quality });
   }
+  return cards;
 }
 
-// Convert a /play?vid={filename} URL to a direct MP4 URL on /video/{filename}
-// The play page does: videoElement.src = BASE_VIDEO_URL + encodeURIComponent(vid)
-// where BASE_VIDEO_URL = "https://w2.hentaiocean.com/video/"
-function playUrlToMp4(playUrl: string): string | null {
-  try {
-    const u = new URL(playUrl);
-    const vid = u.searchParams.get('vid');
-    if (!vid) return null;
-    return `${W2_BASE}/video/${encodeURIComponent(vid)}`;
-  } catch {
-    return null;
-  }
-}
-
-// Verify an MP4 URL is actually reachable (HEAD check)
-async function checkMp4(url: string): Promise<boolean> {
-  try {
-    const r = await fetch(url, {
-      method: 'HEAD',
-      headers: {
-        'User-Agent': HEADERS['User-Agent'],
-        'Referer': W2_BASE + '/',
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-    return r.ok && /video\/mp4/i.test(r.headers.get('content-type') || '');
-  } catch {
-    return false;
-  }
-}
-
-interface HentaiApiInfo {
-  id: number;
-  urlname: string;
-  videoname: string;
-  description: string;
-  releasedate: string;
-  uploaddate: string;
-  coverimg: string;
-  series: string | null;
-  status: number;
-  recentrelease: number;
-}
-interface HentaiApiResponse {
-  info: HentaiApiInfo[];
-  genres: { genre: string }[];
-}
-
-async function fetchVideoMeta(slug: string): Promise<{ genres?: string[]; description?: string; releasedate?: string } | null> {
-  try {
-    const data = await fetchJson<HentaiApiResponse>(`${API_URL}${encodeURIComponent(slug)}`);
-    const info = data.info?.[0];
-    if (!info) return null;
-    return {
-      genres: (data.genres || []).map((g) => g.genre).filter(Boolean),
-      description: info.description ? decodeHtml(info.description) : undefined,
-      releasedate: info.releasedate,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// Main scrape: pull RSS, optionally enrich with API + direct MP4 URL.
-export async function scrapeSource(maxPages = 1, opts?: { enrich?: boolean; resolveMp4?: boolean }): Promise<{ added: number; scanned: number }> {
-  void maxPages;
-  const enrich = opts?.enrich !== false;
-  const resolveMp4 = opts?.resolveMp4 !== false;
-
-  let xml: string;
-  try {
-    xml = await fetchText(RSS_URL);
-  } catch {
-    return { added: 0, scanned: 0 };
-  }
-
-  const rssItems = parseRss(xml);
-  if (rssItems.length === 0) return { added: 0, scanned: 0 };
-
+// Scrape multiple listing pages. 85xo.com uses /latest/{N}/ for pagination.
+export async function scrapeSource(maxPages = 5): Promise<{ added: number; scanned: number }> {
+  let scanned = 0;
   const collected: MediaItem[] = [];
   const seen = new Set<string>();
 
-  // Process in batches of 3 (each item may fetch embed + API + HEAD = 3 requests)
-  const BATCH = 3;
-  for (let i = 0; i < rssItems.length; i += BATCH) {
-    const batch = rssItems.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map(async (r) => {
-        if (seen.has(r.slug)) return null;
-        seen.add(r.slug);
-
-        const thumbnail = `${SOURCE_BASE}/thumbnail/${encodeURIComponent(r.slug)}.webp`;
-        let category = 'main';
-        let mp4Url: string | null = null;
-
-        // Resolve direct MP4 URL (so we can play without source-site ads)
-        if (resolveMp4) {
-          const playUrl = await fetchEmbedMirrorUrl(r.slug);
-          if (playUrl) {
-            const candidate = playUrlToMp4(playUrl);
-            if (candidate && (await checkMp4(candidate))) {
-              mp4Url = candidate;
-            }
-          }
-        }
-
-        // Enrich metadata via API
-        if (enrich) {
-          const meta = await fetchVideoMeta(r.slug);
-          if (meta?.genres?.length) category = meta.genres[0];
-        }
-
-        return {
-          id: r.slug,
-          title: r.title,
-          thumbnail,
-          videoUrl: mp4Url,
-          // If we have a direct MP4, embedUrl is our own proxy; otherwise fall back to HO's embed
-          embedUrl: mp4Url || `${SOURCE_BASE}/embed/${encodeURIComponent(r.slug)}?la=1`,
-          sourceUrl: r.link,
-          duration: null,
-          category,
-        } as MediaItem;
-      })
-    );
-    for (const r of results) if (r) collected.push(r);
-  }
-
-  const added = await addMediaBulk(collected);
-  return { added, scanned: collected.length };
-}
-
-// Add a single video by its /watch/{slug} URL.
-export async function scrapeSingleVideo(url: string): Promise<MediaItem | null> {
-  const m = url.match(/\/(?:watch|embed)\/([^/?#]+)/);
-  const slug = m ? m[1] : url;
-  if (!slug) return null;
-
-  const canonical = `${SOURCE_BASE}/watch/${slug}`;
-  const thumbnail = `${SOURCE_BASE}/thumbnail/${slug}.webp`;
-
-  // Resolve MP4
-  let mp4Url: string | null = null;
-  const playUrl = await fetchEmbedMirrorUrl(slug);
-  if (playUrl) {
-    const candidate = playUrlToMp4(playUrl);
-    if (candidate && (await checkMp4(candidate))) {
-      mp4Url = candidate;
+  for (let page = 1; page <= maxPages; page++) {
+    const candidates = page === 1
+      ? [`${SOURCE_BASE}/`, `${SOURCE_BASE}/latest/`]
+      : [`${SOURCE_BASE}/latest/${page}/`];
+    let cards: ListingCard[] = [];
+    for (const url of candidates) {
+      try {
+        const html = await fetchPage(url);
+        cards = parseListingCards(html);
+        if (cards.length > 0) break;
+      } catch { continue; }
+    }
+    if (cards.length === 0) continue;
+    for (const c of cards) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      scanned++;
+      collected.push({
+        id: c.id,
+        title: c.title,
+        thumbnail: c.thumbnail || null,
+        videoUrl: null, // resolved just-in-time by /api/download proxy
+        embedUrl: `${SOURCE_BASE}/embed/${c.id}`,
+        sourceUrl: c.sourceUrl,
+        duration: c.duration || null,
+        category: c.quality || 'main',
+      });
     }
   }
+  const added = await addMediaBulk(collected);
+  return { added, scanned };
+}
 
-  // Title from RSS
-  let title = slug.replace(/[-_]/g, ' ');
+// Resolve the direct MP4 URL just-in-time by fetching the full video page.
+// The hash in the URL is IP-bound — it only works from the same IP that
+// fetched the page. This function must be called from the server that will
+// also proxy the stream.
+//
+// We use the `download=true` variant (not `embed=true`) because it's more
+// reliable across different videos.
+export async function resolveMp4Url(sourceUrl: string, quality?: '480p' | '720p' | '1080p'): Promise<string | null> {
   try {
-    const xml = await fetchText(RSS_URL);
-    const items = parseRss(xml);
-    const found = items.find((i) => i.slug === slug);
-    if (found) title = found.title;
+    const r = await fetch(sourceUrl, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(10000),
+      redirect: 'follow',
+    });
+    if (!r.ok) return null;
+    const html = await r.text();
+    // Find all download=true get_file URLs
+    const dlUrls = [...html.matchAll(/(https:\/\/www\.85xo\.com\/get_file\/3\/[a-f0-9]+\/\d+\/\d+\/\d+(?:_\d+p)?\.mp4\/\?download_filename=[^"'\s]+&download=true&br=\d+)/g)].map(m => m[1]);
+    if (dlUrls.length === 0) return null;
+    // Parse quality from filename: {id}.mp4 = 480p, {id}_720p.mp4 = 720p, {id}_1080p.mp4 = 1080p
+    const byQuality: Record<string, string> = {};
+    for (const u of dlUrls) {
+      if (u.includes('_1080p.')) byQuality['1080p'] = u;
+      else if (u.includes('_720p.')) byQuality['720p'] = u;
+      else byQuality['480p'] = u;
+    }
+    if (quality && byQuality[quality]) return byQuality[quality];
+    // Default: prefer 720p, then 480p, then 1080p
+    return byQuality['720p'] || byQuality['480p'] || byQuality['1080p'] || dlUrls[0];
   } catch {
-    /* ignore */
+    return null;
   }
+}
 
+export async function scrapeSingleVideo(url: string): Promise<MediaItem | null> {
+  const m = url.match(/\/(?:v|embed)\/(\d+)(?:\/([^/?#]+))?/);
+  if (!m) return null;
+  const id = m[1];
+  const slug = m[2] || '';
+  const canonical = slug ? `${SOURCE_BASE}/v/${id}/${slug}/` : `${SOURCE_BASE}/v/${id}/`;
+  // Fetch the page for title
+  let title = slug.replace(/[-_]/g, ' ') || `Video ${id}`;
+  try {
+    const html = await fetchPage(canonical);
+    const t = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/)?.[1];
+    if (t) title = decodeHtml(t);
+  } catch { /* ignore */ }
+  const thousands = Math.floor(parseInt(id) / 1000) * 1000;
   return {
-    id: slug,
+    id,
     title,
-    thumbnail,
-    videoUrl: mp4Url,
-    embedUrl: mp4Url || `${SOURCE_BASE}/embed/${slug}?la=1`,
+    thumbnail: `${SOURCE_BASE}/contents/videos_screenshots/${thousands}/${id}/390x218/1.jpg`,
+    videoUrl: null,
+    embedUrl: `${SOURCE_BASE}/embed/${id}`,
     sourceUrl: canonical,
     duration: null,
     category: 'main',
   };
 }
 
-export async function addSingleFromUrl(url: string, opts?: { title?: string; thumbnail?: string; videoUrl?: string }) {
+export async function addSingleFromUrl(url: string, opts?: { title?: string; thumbnail?: string }) {
+  if (!/85xo\.com|85po\.com|85po\.net/.test(url)) {
+    throw new Error('URL must be from 85xo.com, 85po.com, or 85po.net');
+  }
   const item = await scrapeSingleVideo(url);
-  if (!item) throw new Error(`Could not parse HentaiOcean URL: ${url}`);
+  if (!item) throw new Error('Could not parse video URL');
   if (opts?.title) item.title = opts.title;
   if (opts?.thumbnail) item.thumbnail = opts.thumbnail;
-  if (opts?.videoUrl) {
-    item.videoUrl = opts.videoUrl;
-    item.embedUrl = opts.videoUrl;
-  }
   await addMedia(item);
   return item;
 }
@@ -306,25 +196,10 @@ export async function addSingleFromUrl(url: string, opts?: { title?: string; thu
 export async function bulkAdd(urls: string[]): Promise<{ added: number; failed: number }> {
   let added = 0;
   let failed = 0;
-  const BATCH = 3;
-  for (let i = 0; i < urls.length; i += BATCH) {
-    const batch = urls.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map(async (raw) => {
-        const url = raw.trim();
-        if (!url || !/^https?:\/\//i.test(url)) return false;
-        try {
-          await addSingleFromUrl(url);
-          return true;
-        } catch {
-          return false;
-        }
-      })
-    );
-    for (const ok of results) {
-      if (ok) added++;
-      else failed++;
-    }
+  for (const raw of urls) {
+    const url = raw.trim();
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    try { await addSingleFromUrl(url); added++; } catch { failed++; }
   }
   return { added, failed };
 }

@@ -32,11 +32,8 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: item.id }),
     }).catch(() => {});
-    if (item.videoUrl) {
-      window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
-    } else if (item.sourceUrl) {
-      window.open(item.sourceUrl, '_blank', 'noopener,noreferrer');
-    }
+    // Always use the proxy — it resolves the MP4 just-in-time and forces download
+    window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
   };
 
   const handleCopy = () => {
@@ -44,8 +41,6 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-
-  const hasDirectMp4 = !!item.videoUrl;
 
   return (
     <div
@@ -70,33 +65,20 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
           </button>
         </div>
 
-        {/* 16:9 video area — constrained height so ads below are visible */}
+        {/* 16:9 video area — always use native <video> via /api/download proxy.
+            The proxy resolves the MP4 URL just-in-time (IP-bound hash) and
+            streams it with Range support. No source-site ads loaded. */}
         <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9', maxHeight: '70vh' }}>
-          {hasDirectMp4 ? (
-            <video
-              src={`/api/download?id=${encodeURIComponent(item.id)}`}
-              className="w-full h-full"
-              style={{ display: 'block', maxHeight: '70vh' }}
-              controls
-              autoPlay
-              playsInline
-              preload="metadata"
-              controlsList="nodownload"
-            />
-          ) : item.embedUrl ? (
-            <iframe
-              src={item.embedUrl}
-              style={{ position: 'absolute', width: '100%', height: '100%', left: 0, top: 0, border: 0 }}
-              allowFullScreen
-              allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-              referrerPolicy="no-referrer"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-              {t(locale, 'empty')}
-            </div>
-          )}
+          <video
+            src={`/api/download?id=${encodeURIComponent(item.id)}`}
+            className="w-full h-full"
+            style={{ display: 'block', maxHeight: '70vh' }}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            controlsList="nodownload"
+          />
         </div>
 
         {/* Info + ads — in normal document flow, scrollable via the outer container */}
