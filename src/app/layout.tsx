@@ -249,16 +249,6 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
 
-        {/* JuicyAds Friendly PopUnder v3.2 — less aggressive, Google-friendly.
-            Only triggers on <a> and <img> clicks. Placed in BODY per docs. */}
-        <Script id="juicy-friendly-v32" strategy="afterInteractive">
-          {`var juicy_tags = ['a', 'img'];`}
-        </Script>
-        <Script
-          src="https://js.juicyads.com/jp.php?c=44640323y274u4r2p2b4x2c434&u=https%3A%2F%2Fwww.juicyads.rocks"
-          strategy="afterInteractive"
-        />
-
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(JSONLD) }}
