@@ -70,9 +70,12 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
 
         {/* 16:9 video area — use /api/download proxy directly.
             The proxy adds CORS headers so the browser can play the MP4.
-            Range requests are supported for seeking. */}
+            Range requests are supported for seeking.
+            key={item.id} forces React to remount the <video> element when the
+            video changes, preventing the browser from showing the previous video. */}
         <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9', maxHeight: '70vh' }}>
           <video
+            key={item.id}
             src={`/api/download?id=${encodeURIComponent(item.id)}`}
             className="w-full h-full"
             style={{ display: 'block', maxHeight: '70vh' }}

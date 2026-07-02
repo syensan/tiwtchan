@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
 
   // Forward response headers + add CORS headers so browser can play it
   const outHeaders: Record<string, string> = {
-    'Cache-Control': 'public, max-age=3600',
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
     'Access-Control-Allow-Headers': 'Range',
