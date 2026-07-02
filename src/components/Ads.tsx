@@ -66,3 +66,22 @@ export function ResponsiveBanner({ className = '' }: { className?: string }) {
 
   return <Ad zone={device === 'mobile' ? 'mobileBanner' : 'pcBanner'} className={className} />;
 }
+
+// JuicyAds PopUnder Direct URL
+// Loads the advanced service script which handles popunder triggering.
+// Placed in the document body; it activates on the first user interaction.
+const POPUNDER_URL = 'https://xapi.juicyads.com/service_advanced.php?code=4454v2c423845684t2133484r2&u=https%3A%2F%2Fwww.juicyads.rocks';
+
+let popunderLoaded = false;
+export function PopUnder() {
+  useEffect(() => {
+    if (popunderLoaded) return;
+    popunderLoaded = true;
+    const s = document.createElement('script');
+    s.src = POPUNDER_URL;
+    s.async = true;
+    s.type = 'text/javascript';
+    document.body.appendChild(s);
+  }, []);
+  return null;
+}

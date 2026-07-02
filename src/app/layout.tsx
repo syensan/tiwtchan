@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { PopUnder } from "@/components/Ads";
 
 const SITE_URL = 'https://twitchan.com';
 const GA_ID = 'G-6HNVZLG0NL';
@@ -102,6 +103,7 @@ export default function RootLayout({
       <body className="antialiased bg-white text-neutral-900">
         {children}
         <Toaster />
+        <PopUnder />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(JSONLD) }}
