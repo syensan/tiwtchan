@@ -1,56 +1,67 @@
 # twitchan.com — for LLMs
 
-> Lightweight, multilingual adult video gallery. 18+ only.
+> Twitter保存ランキング・GoFile保存ランキング・リアルタイム検索のアダルト動画ギャラリー。18+ only.
 
-## Purpose
-twitchan.com aggregates video metadata from the **official Hentai Ocean API** (`https://hentaiocean.com/api`) and embeds videos via the official Embed API (`<iframe src="https://hentaiocean.com/embed/{slug}?la=1">`). The site does not host media files — all video playback happens through the source site's iframe embed.
+## 概要 (Overview)
 
-## Data source
-This site uses the official public API provided by Hentai Ocean. No HTML scraping. Endpoints used:
-- `GET /api?action=recent` — JSON array of all 213 videos (id, urlname, videoname, description, dates, coverimg, recentrelease)
-- `GET /api?action=hentai&slug={slug}` — full video info + genres
-- `GET /embed/{slug}?la=1` — iframe-embeddable player (`?la=1` = reduced ads)
-- `GET /thumbnail/{slug}.webp` — 16:9 video thumbnail
-- `GET /assets/cover/{coverimg}` — DVD cover image
-- `GET /watch/{slug}` — source video page (for download link)
+twitchan.comは、**Twitter保存ランキング**・**GoFile保存ランキング**・**Twitter保存リアルタイム**・**GoFileリアルタイム**を一括検索できる軽量・多言語対応のアダルト動画ギャラリーです。GoFileの代わりとして、またTwitter保存ランキングの見方を解説するプラットフォームとして機能します。
 
-The API is documented and provided by Hentai Ocean for building third-party websites ("create your own hentai website or project using the Hentai Ocean API").
+## 主要キーワード (Target Keywords)
 
-## Anonymous visitor encryption
-Each visitor gets a random 128-bit ID generated client-side (stored in localStorage). The ID is HMAC-SHA256 signed server-side (using `VISITOR_SIGN_KEY` env var), producing a 30-day token. Only the SHA-256 hash of the visitor ID is stored on the server (for view deduplication) — the raw ID never leaves the browser unencrypted. No PII (name, email, IP) is collected.
+- **Twitter保存ランキング** — Twitterで保存された成人向け動画の人気ランキング
+- **Twitter保存リアルタイム** — リアルタイム更新のTwitter保存動画ランキング
+- **Twitter保存ランキング見方** — Twitter保存ランキングの読み方・使い方を解説
+- **GoFile保存ランキング** — GoFileにアップロードされた動画の人気ランキング
+- **GoFileリアルタイム** — リアルタイム更新のGoFile動画ランキング
+- **GoFileの代わり** — GoFileの代替サービスとして直接再生・ダウンロード可能
+- **GoFile見方** — GoFileの見方・使い方をサイト内で完結
 
-## Audience
-Adults 18+ only. The site uses an age gate on first visit and is labeled with RTA-5042 metadata.
+## データソース
 
-## Languages
-18 languages auto-selected by visitor IP geolocation: English, 日本語, 中文, 한국어, Español, Français, Deutsch, Português, Русский, Italiano, العربية, हिन्दी, ไทย, Tiếng Việt, Bahasa Indonesia, Türkçe, Polski, Nederlands. Manual override is always available in the header.
+85po.com（ミラーサイト: 85xo.com経由）のリストページから動画メタデータを取得。MP4 URLはIPバインドされているため、再生時にサーバー側でページを取得し、Just-In-TimeでMP4 URLを解決してプロキシストリーミングします（Range対応、シーク可能）。
 
-## Main features
-- Grid gallery with 15 items per page (infinite scroll via "Next" button)
-- In-site iframe video player (loads Hentai Ocean's official embed with `?la=1` reduced ads)
-- Download button opens the source page in a new tab
-- Search by title
-- Native responsive ads every 15 items
-- Mobile floating ad
-- 300x100 mobile banner
-- 308x286 video ad inside the player
-- Hidden admin panel at `/?p=admin` (4-segment password)
-  - Add single by URL (calls HO API to fetch metadata)
-  - Bulk add (one URL per line)
-  - Full catalog scrape via `GET /api?action=recent` (213 videos)
-  - Clear all media
-- Anonymous visitor encryption (HMAC-SHA256 signed tokens)
+## 主な機能
 
-## Tech
-Next.js 16 App Router + TypeScript + Tailwind 4. No database — uses JSON seed file (`data/media.json`) + Netlify Blobs for admin-added items. Visitor tokens are stateless HMAC-signed. Deployed on Netlify with Netlify Functions handling the admin auth gate.
+- 15件/ページのグリッドギャラリー（「次へ」ボタンでページ送り）
+- ネイティブHTML5 `<video>` プレイヤー（ソースサイトの広告スクリプトを読み込まない）
+- Just-In-Time MP4 プロキシ（Range リクエスト対応、シーク可能）
+- ワンクリックダウンロード（Content-Disposition: attachment）
+- タイトル検索
+- 18言語自動切替（IPジオロケーション）+ 手動切り替え
+- 匿名訪問者暗号化（HMAC-SHA256署名、AES-256-GCM暗号化、peppered SHA-256ハッシュ）
+- 18歳以上年齢確認ゲート（RTA-5042ラベル）
+- JuicyAds広告（PC Banner 468x60, Mobile 300x100, Native 108x140, In-Video 308x286, Image 250x250, PopUnder）
 
-## Content policy
-All media is sourced from Hentai Ocean via their official public API. We do not host, store, or cache media — only embed via iframe. Takedown requests are honored — see /?p=policy.
+## SEO / LLMO 最適化
 
-## Important URLs
+- `<title>` と `<meta description>` に主要キーワードを含む
+- `<meta keywords>` で日本語・英語の両方のキーワードバリエーションを網羅
+- JSON-LD `WebSite` 構造化データ（`alternateName`, `keywords` 含む）
+- JSON-LD `FAQPage` 構造化データ（5つのFAQ — Twitter保存ランキング見方、GoFile保存ランキングとは、GoFileの代わり、GoFile見方、Twitter保存ランキングリアルタイム）
+- `llms.txt` / `llms-full.txt` でLLM向けコンテンツ提供
+- `sitemap.xml` で全動画URLを検索エンジンに通知
+- `robots.txt` でクロール許可
+
+## 対象読者
+
+18歳以上の成人のみ。サイト入場時に年齢確認ゲートを表示し、RTA-5042メタデータでラベリング。
+
+## 対応言語
+
+18言語（IPジオロケーションで自動選択）: English, 日本語, 中文, 한국어, Español, Français, Deutsch, Português, Русский, Italiano, العربية, हिन्दी, ไทย, Tiếng Việt, Bahasa Indonesia, Türkçe, Polski, Nederlands
+
+## 技術スタック
+
+Next.js 16 App Router + TypeScript + Tailwind 4. データベース不要 — JSON シードファイル (`data/media.json`) + Netlify Blobs。訪問者トークンはステートレスHMAC署名。Netlify にデプロイ。
+
+## コンテンツポリシー
+
+全メディアは第三者プロバイダ（85xo.com）から取得。メディアファイルのホスティング・保存・キャッシュは行わず、Just-In-Time プロキシでストリーミングのみ。削除要請は `/?p=policy` に記載。
+
+## 重要URL
+
 - Home: https://twitchan.com/
 - About: https://twitchan.com/?p=about
 - Policy: https://twitchan.com/?p=policy
-- Sitemap: https://twitchan.com/api/sitemap
-- Robots: https://twitchan.com/api/robots
-- Admin: https://twitchan.com/?p=admin (password-protected)
+- Sitemap: https://twitchan.com/sitemap.xml
+- Robots: https://twitchan.com/robots.txt

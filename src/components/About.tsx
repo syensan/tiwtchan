@@ -8,23 +8,48 @@ export default function About({ locale }: { locale: Locale }) {
       <h1 className="text-2xl font-bold mb-4">{t(locale, 'about_title')}</h1>
       <div className="prose prose-sm text-neutral-700 space-y-4">
         <p>
-          twitchan.com is a lightweight, multilingual adult media gallery that aggregates publicly available video listings from third-party providers.
-          Our goal is to provide a fast, distraction-free browsing experience with in-site playback and one-click download.
+          twitchan.comは、<strong>Twitter保存ランキング</strong>・<strong>GoFile保存ランキング</strong>・<strong>Twitter保存リアルタイム</strong>・<strong>GoFileリアルタイム</strong>を一括検索できる軽量・多言語対応のアダルト動画ギャラリーです。
+          GoFileの代わりとして、またTwitter保存ランキングの見方を解説するプラットフォームとして、高速で邪魔にならない浏览体験とサイト内再生・ワンクリックダウンロードを提供します。
         </p>
         <p>
-          The site is designed to be lightweight: no heavy frameworks, no tracking, no invasive popups. We respect your privacy and your bandwidth.
-          All textual UI is auto-translated based on your IP geolocation, with manual language switching available at any time.
+          当サイトは軽量設計です — 重いフレームワークなし、トラッキングなし、侵入的なポップアップなし。プライバシーと通信量を尊重します。
+          すべてのUIテキストはIPジオロケーションに基づいて自動翻訳され、ヘッダーからいつでも手動で言語切替可能です（18言語対応）。
         </p>
-        <p>
-          All content displayed on twitchan.com is sourced from third-party providers and embedded via their public URLs.
-          We do not host, store, or transmit any media files on our servers. If you are a content owner and wish to have a listing removed,
-          please refer to our Policy page for takedown instructions.
-        </p>
-        <p>
-          By using this site, you confirm that you are at least 18 years of age (or the age of majority in your jurisdiction)
-          and that adult content is legal where you live. The site is labeled with RTA (Restricted to Adults) and follows
-          industry-standard age-verification practices.
-        </p>
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-2">Twitter保存ランキングの見方</h2>
+          <p>
+            ホームページに表示される動画カード一覧が「Twitter保存ランキング」です。各カードをクリックすると内蔵プレイヤーで再生されます。
+            ページ下部の「次へ」ボタンで過去のランキングを遡って確認できます。検索ボックスでタイトル検索も可能です。
+            リアルタイム更新にも対応しており、最新の保存動画は常にリスト上位に表示されます。
+          </p>
+        </section>
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-2">GoFile保存ランキングとは</h2>
+          <p>
+            GoFile保存ランキングは、GoFileにアップロードされた成人向け動画の人気ランキングです。
+            twitchan.comではTwitter保存ランキングとGoFile保存ランキングを一括して検索・閲覧でき、リアルタイム更新にも対応しています。
+            GoFile本体にアクセスすることなく、サイト内で直接再生・ダウンロードが可能です。
+          </p>
+        </section>
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-2">GoFileの代わりとしての利用</h2>
+          <p>
+            twitchan.comは<strong>GoFileの代わり</strong>として利用できます。GoFileと同等の動画をサイト内で直接再生・ダウンロード可能で、
+            追加のアカウント登録や外部アプリのインストールは不要です。GoFileの見方・使い方に迷った場合も、当サイトの動画カードをクリックするだけで内蔵プレイヤーが起動し、ダウンロードボタンからMP4形式で保存できます。
+          </p>
+        </section>
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-2">コンテンツとプライバシー</h2>
+          <p>
+            twitchan.comに表示される全コンテンツは第三者プロバイダから取得しており、メディアファイルのホスティング・保存・キャッシュは行っていません。
+            再生時はJust-In-Timeプロキシでストリーミングのみを行います。コンテンツ所有者で削除を希望される場合は、ポリシーページのテイクダウン手順をご参照ください。
+          </p>
+          <p>
+            匿名訪問者暗号化により、IPアドレス・UAは保存時にハッシュ化・暗号化され、身元特定できません。
+            当サイトの利用により、18歳以上（または居住地の法定年齢）であり、成人コンテンツの閲覧が合法であることを確認したものとみなされます。
+            サイトはRTA（Restricted to Adults）ラベル付きで、業界標準の年齢確認を実施しています。
+          </p>
+        </section>
       </div>
     </div>
   );

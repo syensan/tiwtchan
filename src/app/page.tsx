@@ -233,6 +233,13 @@ export default function Home() {
 
       <footer className="mt-auto border-t border-neutral-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 py-6 text-center">
+          {/* SEO keyword cloud — long-tail Japanese queries */}
+          <div className="mb-3 text-[11px] text-neutral-400 leading-relaxed">
+            <span className="text-neutral-500">人気キーワード:</span>{' '}
+            Twitter保存ランキング · Twitter保存リアルタイム · Twitter保存ランキング見方 ·{' '}
+            GoFile保存ランキング · GoFileリアルタイム · GoFileの代わり · GoFile見方 ·{' '}
+            ツイッター保存ランキング · 保存ランキング · リアルタイムランキング
+          </div>
           <p className="text-xs text-neutral-500 mb-2">
             © {new Date().getFullYear()} twitchan.com · {t(locale, 'footerRights')}
           </p>
