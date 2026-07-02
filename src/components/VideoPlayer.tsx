@@ -13,8 +13,6 @@ interface Props {
 
 export default function VideoPlayer({ item, locale, onClose }: Props) {
   const [copied, setCopied] = useState(false);
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!item) return;
@@ -27,37 +25,6 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
     };
   }, [onClose, item]);
 
-  // Fetch the direct MP4 URL via /api/download (returns 302 redirect).
-  // The browser follows the redirect and we capture the final URL to use as <video src>.
-  // This avoids streaming through our server (saves Compute) — the visitor's
-  // browser fetches the MP4 directly from 85xo.com.
-  useEffect(() => {
-    if (!item) return;
-    let cancelled = false;
-    // Use fetch with redirect:'follow' to get the final URL
-    fetch(`/api/download?id=${encodeURIComponent(item.id)}`, { redirect: 'follow' })
-      .then((r) => {
-        if (cancelled) return;
-        if (!r.ok && r.status !== 0) throw new Error(`HTTP ${r.status}`);
-        // The final URL after redirect is the direct MP4 URL
-        const finalUrl = r.url || '';
-        if (finalUrl && finalUrl.startsWith('http')) {
-          setVideoSrc(finalUrl);
-        } else {
-          throw new Error('no redirect URL');
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // Fallback: use the proxy URL directly (browser will follow redirect)
-        setVideoSrc(`/api/download?id=${encodeURIComponent(item.id)}`);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [item]);
-
   if (!item) return null;
 
   const handleDownload = () => {
@@ -66,7 +33,7 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: item.id }),
     }).catch(() => {});
-    // Open the download URL — browser follows 302 redirect to MP4 with attachment
+    // Open the download URL — proxy streams MP4 with attachment disposition
     window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
     // Fire a popunder after the download click
     firePopUnder();
@@ -101,29 +68,20 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
           </button>
         </div>
 
-        {/* 16:9 video area */}
+        {/* 16:9 video area — use /api/download proxy directly.
+            The proxy adds CORS headers so the browser can play the MP4.
+            Range requests are supported for seeking. */}
         <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9', maxHeight: '70vh' }}>
-          {loading ? (
-            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-              <div className="animate-pulse">Loading video…</div>
-            </div>
-          ) : videoSrc ? (
-            <video
-              src={videoSrc}
-              className="w-full h-full"
-              style={{ display: 'block', maxHeight: '70vh' }}
-              controls
-              autoPlay
-              playsInline
-              preload="metadata"
-              controlsList="nodownload"
-              referrerPolicy="no-referrer"
-            />
-          ) : !videoSrc ? (
-            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-              {t(locale, 'empty')}
-            </div>
-          ) : null}
+          <video
+            src={`/api/download?id=${encodeURIComponent(item.id)}`}
+            className="w-full h-full"
+            style={{ display: 'block', maxHeight: '70vh' }}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            controlsList="nodownload"
+          />
         </div>
 
         {/* Info + ads */}
