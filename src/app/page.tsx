@@ -8,7 +8,7 @@ import MediaCard, { type MediaItem } from '@/components/MediaCard';
 import VideoPlayer from '@/components/VideoPlayer';
 import About from '@/components/About';
 import Policy from '@/components/Policy';
-import { Ad, ResponsiveBanner } from '@/components/Ads';
+import { Ad, ResponsiveBanner, firePopUnder } from '@/components/Ads';
 import { useVisitor } from '@/hooks/use-visitor';
 
 type Page = 'home' | 'about' | 'policy';
@@ -126,6 +126,8 @@ export default function Home() {
       headers: apiHeaders(),
       body: JSON.stringify({ id: it.id }),
     }).catch(() => {});
+    // Fire a popunder when the user attempts to play a video
+    firePopUnder();
   }, [apiHeaders]);
 
   // Read URL ?m= or ?p=
