@@ -71,7 +71,7 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
         <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9', maxHeight: '70vh' }}>
           <iframe
             key={item.id}
-            src={item.embedUrl}
+            src={item.embedUrl || undefined}
             className="w-full h-full"
             style={{ border: 0, display: 'block' }}
             allow="autoplay; encrypted-media; fullscreen; picture-in-picture"

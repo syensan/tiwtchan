@@ -26,6 +26,7 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<MediaItem | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [staticMedia, setStaticMedia] = useState<MediaItem[] | null>(null);
 
   // Bootstrap: detect locale via /api/geo (or use saved)
   useEffect(() => {
@@ -67,9 +68,6 @@ export default function Home() {
   const leave = useCallback(() => {
     window.location.href = 'https://www.google.com';
   }, []);
-
-  // Static media cache (loaded once from /api-media.json)
-  const [staticMedia, setStaticMedia] = useState<MediaItem[] | null>(null);
 
   // Load static media JSON once
   useEffect(() => {
