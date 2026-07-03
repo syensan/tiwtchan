@@ -15,8 +15,21 @@ const AGE_KEY = 'twitchan_age_ok_v1';
 const LOCALE_KEY = 'twitchan_locale_v1';
 
 export default function Home() {
-  const [ageOk, setAgeOk] = useState(false);
-  const [locale, setLocale] = useState<Locale>('en');
+  // Fix: Use lazy initialization instead of setState in useEffect
+  const [ageOk, setAgeOk] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(AGE_KEY) === '1';
+  });
+
+  const [locale, setLocale] = useState<Locale>(() => {
+    if (typeof window === 'undefined') return 'en';
+    const saved = localStorage.getItem(LOCALE_KEY) as Locale | null;
+    if (saved && LOCALES.includes(saved)) {
+      return saved;
+    }
+    return 'en';
+  });
+
   const [page, setPage] = useState<Page>('home');
   const [items, setItems] = useState<MediaItem[]>([]);
   const [page_, setPage_] = useState(1);
@@ -28,20 +41,9 @@ export default function Home() {
   const [initializing, setInitializing] = useState(true);
   const [staticMedia, setStaticMedia] = useState<MediaItem[] | null>(null);
 
-  // Bootstrap: detect locale client-side (no Function call — saves Compute).
+  // Bootstrap: detect locale client-side via ipapi.co (no Function call — saves Compute).
   // Uses ipapi.co directly from the browser. Falls back to saved/browser locale.
   useEffect(() => {
-    const savedAge = typeof window !== 'undefined' && localStorage.getItem(AGE_KEY) === '1';
-    const savedLocale = (typeof window !== 'undefined' && localStorage.getItem(LOCALE_KEY)) as Locale | null;
-    setAgeOk(savedAge);
-
-    if (savedLocale && LOCALES.includes(savedLocale)) {
-      setLocale(savedLocale);
-      setInitializing(false);
-      return;
-    }
-
-    // Try client-side geo detection via ipapi.co (no server Function needed)
     const COUNTRY_LOCALE: Record<string, Locale> = {
       JP: 'ja', CN: 'zh', HK: 'zh', TW: 'zh', SG: 'zh',
       KR: 'ko', ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es', PE: 'es',
@@ -52,16 +54,23 @@ export default function Home() {
       SA: 'ar', AE: 'ar', EG: 'ar', QA: 'ar', KW: 'ar',
     };
 
-    fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(4000) })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j && j.country_code) {
-          const loc = COUNTRY_LOCALE[j.country_code.toUpperCase()] || 'en';
-          if (LOCALES.includes(loc)) setLocale(loc);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setInitializing(false));
+    // Only try geo detection if locale is still default 'en'
+    if (locale === 'en') {
+      fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(4000) })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j && j.country_code) {
+            const loc = COUNTRY_LOCALE[j.country_code.toUpperCase()] || 'en';
+            if (LOCALES.includes(loc)) {
+              setLocale(loc);
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setInitializing(false));
+    } else {
+      setInitializing(false);
+    }
   }, []);
 
   // Update <html> dir + lang when locale changes
