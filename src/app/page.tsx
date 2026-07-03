@@ -28,7 +28,8 @@ export default function Home() {
   const [initializing, setInitializing] = useState(true);
   const [staticMedia, setStaticMedia] = useState<MediaItem[] | null>(null);
 
-  // Bootstrap: detect locale via /api/geo (or use saved)
+  // Bootstrap: detect locale client-side (no Function call — saves Compute).
+  // Uses ipapi.co directly from the browser. Falls back to saved/browser locale.
   useEffect(() => {
     const savedAge = typeof window !== 'undefined' && localStorage.getItem(AGE_KEY) === '1';
     const savedLocale = (typeof window !== 'undefined' && localStorage.getItem(LOCALE_KEY)) as Locale | null;
@@ -37,15 +38,30 @@ export default function Home() {
     if (savedLocale && LOCALES.includes(savedLocale)) {
       setLocale(savedLocale);
       setInitializing(false);
-    } else {
-      fetch('/api/geo')
-        .then((r) => r.json())
-        .then((j) => {
-          if (j.locale && LOCALES.includes(j.locale)) setLocale(j.locale);
-        })
-        .catch(() => {})
-        .finally(() => setInitializing(false));
+      return;
     }
+
+    // Try client-side geo detection via ipapi.co (no server Function needed)
+    const COUNTRY_LOCALE: Record<string, Locale> = {
+      JP: 'ja', CN: 'zh', HK: 'zh', TW: 'zh', SG: 'zh',
+      KR: 'ko', ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es', PE: 'es',
+      FR: 'fr', BE: 'fr', CA: 'fr', DE: 'de', AT: 'de', CH: 'de',
+      BR: 'pt', PT: 'pt', RU: 'ru', BY: 'ru', KZ: 'ru',
+      IT: 'it', IN: 'hi', TH: 'th', VN: 'vi', ID: 'id',
+      TR: 'tr', PL: 'pl', NL: 'nl',
+      SA: 'ar', AE: 'ar', EG: 'ar', QA: 'ar', KW: 'ar',
+    };
+
+    fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(4000) })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j && j.country_code) {
+          const loc = COUNTRY_LOCALE[j.country_code.toUpperCase()] || 'en';
+          if (LOCALES.includes(loc)) setLocale(loc);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setInitializing(false));
   }, []);
 
   // Update <html> dir + lang when locale changes
