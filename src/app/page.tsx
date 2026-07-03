@@ -9,7 +9,6 @@ import VideoPlayer from '@/components/VideoPlayer';
 import About from '@/components/About';
 import Policy from '@/components/Policy';
 import { Ad, ResponsiveBanner, firePopUnder } from '@/components/Ads';
-import { useVisitor } from '@/hooks/use-visitor';
 
 type Page = 'home' | 'about' | 'policy';
 const AGE_KEY = 'twitchan_age_ok_v1';
@@ -27,7 +26,6 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<MediaItem | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const visitor = useVisitor();
 
   // Bootstrap: detect locale via /api/geo (or use saved)
   useEffect(() => {
@@ -70,29 +68,44 @@ export default function Home() {
     window.location.href = 'https://www.google.com';
   }, []);
 
-  // Helper: build headers with visitor token
-  const apiHeaders = useCallback((extra: Record<string, string> = {}) => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
-    if (visitor?.token) h['X-Visitor-Token'] = visitor.token;
-    return h;
-  }, [visitor]);
+  // Static media cache (loaded once from /api-media.json)
+  const [staticMedia, setStaticMedia] = useState<MediaItem[] | null>(null);
 
-  // Fetch media
+  // Load static media JSON once
+  useEffect(() => {
+    if (staticMedia) return;
+    fetch('/api-media.json')
+      .then((r) => r.json())
+      .then((j) => setStaticMedia(j.items || []))
+      .catch(() => setStaticMedia([]));
+  }, [staticMedia]);
+
+  // Fetch media (from static cache, no Function call)
   const fetchPage = useCallback(async (p: number, append: boolean, q: string) => {
+    if (!staticMedia) return;
     setLoading(true);
     try {
-      const url = `/api/media?page=${p}&pageSize=15${q ? `&q=${encodeURIComponent(q)}` : ''}`;
-      const r = await fetch(url, { headers: apiHeaders() });
-      const j = await r.json();
-      setItems((prev) => (append ? [...prev, ...(j.items || [])] : (j.items || [])));
-      setPage_(j.page || 1);
-      setTotalPages(j.pages || 1);
-      setTotal(j.total || 0);
+      const pageSize = 15;
+      let filtered = staticMedia;
+      if (q) {
+        const ql = q.toLowerCase();
+        filtered = staticMedia.filter((m) =>
+          (m.title || '').toLowerCase().includes(ql) ||
+          (m.id || '').toLowerCase().includes(ql)
+        );
+      }
+      const total = filtered.length;
+      const start = (p - 1) * pageSize;
+      const pageItems = filtered.slice(start, start + pageSize);
+      setItems((prev) => (append ? [...prev, ...pageItems] : pageItems));
+      setPage_(p);
+      setTotalPages(Math.max(1, Math.ceil(total / pageSize)));
+      setTotal(total);
     } catch {
     } finally {
       setLoading(false);
     }
-  }, [apiHeaders]);
+  }, [staticMedia]);
 
   // Reload when page or search changes (non-append)
   useEffect(() => {
@@ -121,14 +134,11 @@ export default function Home() {
 
   const watch = useCallback((it: MediaItem) => {
     setCurrent(it);
-    fetch('/api/click', {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ id: it.id }),
-    }).catch(() => {});
+    // Skip the /api/click call to reduce Function invocations (cost optimization).
+    // View counts are now best-effort via the iframe load itself.
     // Fire a popunder when the user attempts to play a video
     firePopUnder();
-  }, [apiHeaders]);
+  }, []);
 
   // Read URL ?m= or ?p=
   useEffect(() => {
@@ -138,16 +148,11 @@ export default function Home() {
     const m = u.searchParams.get('m');
     if (p === 'about') setPage('about');
     else if (p === 'policy') setPage('policy');
-    if (m) {
-      fetch('/api/media?q=' + encodeURIComponent(m), { headers: apiHeaders() })
-        .then((r) => r.json())
-        .then((j) => {
-          const found = (j.items || []).find((x: MediaItem) => x.id === m);
-          if (found) setCurrent(found);
-        })
-        .catch(() => {});
+    if (m && staticMedia) {
+      const found = staticMedia.find((x) => x.id === m);
+      if (found) setCurrent(found);
     }
-  }, [ageOk, apiHeaders]);
+  }, [ageOk, staticMedia]);
 
   const isRTL = RTL_LOCALES.includes(locale);
 

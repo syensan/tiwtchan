@@ -28,14 +28,10 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
   if (!item) return null;
 
   const handleDownload = () => {
-    fetch('/api/click', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: item.id }),
-    }).catch(() => {});
-    // Open the download URL — proxy streams MP4 with attachment disposition
-    window.open(`/api/download?id=${encodeURIComponent(item.id)}&download=1`, '_blank', 'noopener');
-    // Fire a popunder after the download click
+    // Open the source page in a new tab — user downloads from there
+    if (item.sourceUrl) {
+      window.open(item.sourceUrl, '_blank', 'noopener,noreferrer');
+    }
     firePopUnder();
   };
 
@@ -68,22 +64,20 @@ export default function VideoPlayer({ item, locale, onClose }: Props) {
           </button>
         </div>
 
-        {/* 16:9 video area — use /api/download proxy directly.
-            The proxy adds CORS headers so the browser can play the MP4.
-            Range requests are supported for seeking.
-            key={item.id} forces React to remount the <video> element when the
-            video changes, preventing the browser from showing the previous video. */}
+        {/* 16:9 video area — embed 85xo.com's native player via iframe.
+            This is the only reliable way to play IP-bound MP4s.
+            The embed page handles MP4 URL resolution from the visitor's IP.
+            key={item.id} forces iframe reload when video changes. */}
         <div className="w-full bg-black" style={{ position: 'relative', aspectRatio: '16 / 9', maxHeight: '70vh' }}>
-          <video
+          <iframe
             key={item.id}
-            src={`/api/download?id=${encodeURIComponent(item.id)}`}
+            src={item.embedUrl}
             className="w-full h-full"
-            style={{ display: 'block', maxHeight: '70vh' }}
-            controls
-            autoPlay
-            playsInline
-            preload="metadata"
-            controlsList="nodownload"
+            style={{ border: 0, display: 'block' }}
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
           />
         </div>
 

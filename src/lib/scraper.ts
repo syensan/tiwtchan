@@ -125,11 +125,12 @@ export async function scrapeSource(maxPages = 30): Promise<{ added: number; scan
   return { added, scanned };
 }
 
-// In-memory cache of resolved MP4 URLs (TTL 5 minutes).
-// Keyed by `${videoId}:${quality}`. In Netlify Functions, warm instances
+// In-memory cache of resolved MP4 URLs (TTL 10 minutes, max 500 entries).
+// Keyed by `${sourceUrl}:${quality}`. In Netlify Functions, warm instances
 // reuse this cache across requests — saving a fetch per play.
 const mp4Cache = new Map<string, { url: string; ts: number }>();
-const MP4_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MP4_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const MP4_CACHE_MAX = 500;
 
 // Resolve the direct MP4 URL just-in-time by fetching the full video page.
 // The hash in the URL is IP-bound — it only works from the same IP that
@@ -143,6 +144,11 @@ export async function resolveMp4Url(sourceUrl: string, quality?: '480p' | '720p'
   const cached = mp4Cache.get(cacheKey);
   if (cached && Date.now() - cached.ts < MP4_CACHE_TTL) {
     return cached.url;
+  }
+  // Evict oldest entries if cache is full
+  if (mp4Cache.size >= MP4_CACHE_MAX) {
+    const oldest = [...mp4Cache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+    if (oldest) mp4Cache.delete(oldest[0]);
   }
   try {
     const r = await fetch(sourceUrl, {
